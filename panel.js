@@ -1,130 +1,191 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   El Manijero · panel.js v2.0
-   El frontend solo hace 5 cosas:
-   1. Cargar biblioteca al inicio
-   2. Reproducir audio
-   3. Reportar fin de tema al backend
-   4. Reportar cortina al backend (el backend decide la siguiente tanda)
-   5. Refrescar estado cada 30 segundos
-   Sin métricas inventadas. Sin decisiones de tanda.
+   El Manijero Radio · panel.js v2.1
+   Radio global sincronizada.
+   El frontend hace 6 cosas:
+   1. Entrar sincronizado (offset = ahora - InicioTema)
+   2. Reproducir audio con Web Audio API (EQ real)
+   3. Reportar al backend qué está sonando + duracionSeg real
+   4. Al terminar cortina → backend genera siguiente tanda
+   5. Polling cada 30s para nuevos temas
+   6. Chat en tiempo real
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxq7UmItdXu-pr-bV26PWyD3aylipuGDAcTkfHyWNiIeXOnBg4DLMnSem0I5YHw2S23uA/exec';
-
+const GAS_URL              = 'https://script.google.com/macros/s/AKfycbyqQ_W559BjKp3_q3oSy_numyR2pL_yBf2CX0NuvahNqQm0iA9vZ_ePX9OWabUw_zJGxw/exec';
 const CORTINA_DURACION_SEG = 45;
-const POLLING_INTERVAL_MS  = 30000;
+const POLLING_MS           = 30000;
+const CHAT_POLLING_MS      = 8000;
 
-// ── Estado global (mínimo necesario) ──────────────────────────────────────
-let biblioteca    = [];
-let indexActual   = 0;
-let estadoPanel   = 'idle';   // idle · playing · paused · stopped
-let sesionActualID = null;
+// ── Estado ─────────────────────────────────────────────────────────────────
+let biblioteca     = [];
+let indexActual    = 0;
+let estadoPanel    = 'idle';
+let audioGenId     = 0;
 
-// ── Audio ──────────────────────────────────────────────────────────────────
-let audioEl    = null;
-let audioGenId = 0;
-
-// ── Timers ─────────────────────────────────────────────────────────────────
-let cortinaTimer  = null;
-let pollingTimer  = null;
+// ── Web Audio API ──────────────────────────────────────────────────────────
+let audioCtx       = null;
+let sourceNode     = null;
+let bassFilter     = null;
+let trebleFilter   = null;
+let gainNode       = null;
+let analyserNode   = null;
+let audioEl        = null;
 
 // ── Knob ───────────────────────────────────────────────────────────────────
-let knobValue    = 72;
-let knobDragging = false;
-let knobStartY   = 0;
-let knobStartVal = 72;
+let knobValue      = 72;
+let knobDragging   = false;
+let knobStartY     = 0;
+let knobStartVal   = 72;
+
+// ── Timers ─────────────────────────────────────────────────────────────────
+let cortinaTimer   = null;
+let pollingTimer   = null;
+let chatTimer      = null;
+let vuTimer        = null;
+let ultimoIDReportado = null;
 
 // ══════════════════════════════════════════════════════════════════════════
 // ARRANQUE
 // ══════════════════════════════════════════════════════════════════════════
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   updateClock();
   setInterval(updateClock, 30000);
   initSliders();
   initKnob();
   actualizarBotones();
-  cargarBiblioteca();
+  sincronizarEntrada();
   window.addEventListener('resize', handleResize);
   setTimeout(handleResize, 100);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// CARGAR BIBLIOTECA
+// SINCRONIZACIÓN DE ENTRADA
+// Nuevo cliente → pregunta al backend qué está sonando y entra en sync
 // ══════════════════════════════════════════════════════════════════════════
 
-async function cargarBiblioteca() {
-  mostrarEstadoCarga('Conectando con el sistema…');
+async function sincronizarEntrada() {
+  mostrarEstadoCarga('Conectando con la radio…');
 
   try {
-    // Primero traer estado del sistema para capturar sesionID
-    const resEstado = await fetch(GAS_URL + '?action=getEstado');
+    // 1. Estado de la radio (qué está sonando ahora)
+    const resEstado = await fetch(GAS_URL + '?action=getEstadoRadio');
     const estado    = await resEstado.json();
 
-    if (estado.sesion && estado.sesion.sesionID) {
-      sesionActualID = estado.sesion.sesionID;
-      mostrarModo(estado.modo);
-    }
-
-    // Luego traer biblioteca
+    // 2. Biblioteca completa
     const resBib = await fetch(GAS_URL + '?action=getBiblioteca');
-    const data   = await resBib.json();
+    const bib    = await resBib.json();
 
-    if (!Array.isArray(data) || !data.length) {
-      mostrarEstadoCarga('Biblioteca vacía. Iniciá la noche desde el panel.');
+    if (!Array.isArray(bib) || !bib.length) {
+      mostrarEstadoCarga('Radio sin contenido. Iniciá la radio desde el backend.');
       return;
     }
 
-    biblioteca = data;
+    biblioteca = bib;
     mostrarEstadoCarga(null);
-    renderBibliotecaCargada();
     actualizarBotones();
     iniciarPolling();
+    iniciarChatPolling();
 
-  } catch(e) {
-    console.warn('Error cargando biblioteca:', e);
+    // Si la radio está activa y hay tema sonando, entrar en sync
+    if (estado.ok && estado.AudioURL && estado.OffsetSeg >= 0) {
+      const idx = biblioteca.findIndex(t => t.ID === estado.ID);
+      indexActual = idx >= 0 ? idx : 0;
+      estadoPanel = 'playing';
+      actualizarBotones();
+      actualizarLiveBadge();
+      renderTemaActual(biblioteca[indexActual], indexActual);
+      renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
+      reproducirDesdeOffset(biblioteca[indexActual], estado.OffsetSeg);
+    } else {
+      renderBibliotecaCargada();
+    }
+
+  } catch (e) {
+    console.warn('Error sincronizando:', e);
     mostrarEstadoCarga('Error al conectar. Verificá la URL del GAS.');
   }
 }
 
-async function refrescarBiblioteca() {
-  try {
-    const res  = await fetch(GAS_URL + '?action=getBiblioteca');
-    const data = await res.json();
-    if (!Array.isArray(data) || !data.length) return;
+// ══════════════════════════════════════════════════════════════════════════
+// WEB AUDIO API — inicializar contexto y cadena de efectos
+// ══════════════════════════════════════════════════════════════════════════
 
-    const temaActual   = biblioteca[indexActual];
-    const idsYaUsados  = new Set(biblioteca.slice(0, indexActual + 1).map(t => t.ID));
-    const nuevos       = data.filter(t => !idsYaUsados.has(t.ID));
-    const longAntes    = biblioteca.length;
+function initAudioContext() {
+  if (audioCtx) return;
+  audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+  gainNode     = audioCtx.createGain();
+  gainNode.gain.value = knobValue / 100;
 
-    biblioteca = biblioteca.slice(0, indexActual + 1).concat(nuevos);
+  bassFilter           = audioCtx.createBiquadFilter();
+  bassFilter.type      = 'lowshelf';
+  bassFilter.frequency.value = 200;
+  bassFilter.gain.value      = 0;
 
-    const diff = biblioteca.length - longAntes;
-    if (diff > 0) {
-      mostrarToast('+' + diff + ' tema' + (diff > 1 ? 's' : '') + ' agregado' + (diff > 1 ? 's' : ''));
-      if (estadoPanel === 'playing') {
-        renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
-        actualizarContadorTemas();
-      }
-    }
-  } catch(e) {
-    console.warn('Error refrescando biblioteca:', e);
-  }
+  trebleFilter           = audioCtx.createBiquadFilter();
+  trebleFilter.type      = 'highshelf';
+  trebleFilter.frequency.value = 4000;
+  trebleFilter.gain.value      = 0;
+
+  analyserNode             = audioCtx.createAnalyser();
+  analyserNode.fftSize     = 256;
+  analyserNode.smoothingTimeConstant = 0.8;
+
+  // Cadena: source → bass → treble → gain → analyser → destino
+  bassFilter.connect(trebleFilter);
+  trebleFilter.connect(gainNode);
+  gainNode.connect(analyserNode);
+  analyserNode.connect(audioCtx.destination);
 }
 
-function iniciarPolling() {
-  if (pollingTimer) return;
-  pollingTimer = setInterval(refrescarBiblioteca, POLLING_INTERVAL_MS);
+function conectarAudioEl(el) {
+  if (!audioCtx) initAudioContext();
+  if (sourceNode) {
+    try { sourceNode.disconnect(); } catch(e) {}
+  }
+  sourceNode = audioCtx.createMediaElementSource(el);
+  sourceNode.connect(bassFilter);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// CONTROL DE MILONGA
+// VU METER REAL (desde analyser)
+// ══════════════════════════════════════════════════════════════════════════
+
+function iniciarVU() {
+  if (vuTimer) return;
+  const data = new Uint8Array(analyserNode ? analyserNode.frequencyBinCount : 0);
+  vuTimer = setInterval(function () {
+    if (!analyserNode) return;
+    analyserNode.getByteFrequencyData(data);
+    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+    const db  = avg > 0 ? (20 * Math.log10(avg / 255)).toFixed(1) : '-∞';
+    setEl('meta-lufs', db + ' dB');
+
+    // Barras de VU si existen en el HTML
+    const bL = document.getElementById('vu-left');
+    const bR = document.getElementById('vu-right');
+    const pct = Math.min((avg / 255) * 100, 100).toFixed(1);
+    if (bL) bL.style.height = pct + '%';
+    if (bR) bR.style.height = (pct * (0.9 + Math.random() * 0.2)).toFixed(1) + '%';
+  }, 80);
+}
+
+function detenerVU() {
+  if (vuTimer) { clearInterval(vuTimer); vuTimer = null; }
+  setEl('meta-lufs', '—');
+  const bL = document.getElementById('vu-left');
+  const bR = document.getElementById('vu-right');
+  if (bL) bL.style.height = '0%';
+  if (bR) bR.style.height = '0%';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CONTROL DE REPRODUCCIÓN
 // ══════════════════════════════════════════════════════════════════════════
 
 function iniciarMilonga() {
   if (!biblioteca.length) return;
   if (estadoPanel === 'paused') { reanudar(); return; }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   estadoPanel = 'playing';
   indexActual = 0;
   actualizarBotones();
@@ -136,32 +197,37 @@ function pausarMilonga() {
   if (estadoPanel !== 'playing') return;
   estadoPanel = 'paused';
   if (audioEl && !audioEl.paused) audioEl.pause();
+  if (audioCtx) audioCtx.suspend();
   detenerTimers();
+  detenerVU();
   activarRing(false);
   actualizarBotones();
   actualizarLiveBadge();
-  setEl('ia-texto', 'Milonga en pausa.');
+  setEl('ia-texto', 'Radio en pausa.');
 }
 
 function reanudar() {
   estadoPanel = 'playing';
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   if (audioEl && audioEl.paused) audioEl.play();
   actualizarBotones();
   actualizarLiveBadge();
   activarRing(true);
+  iniciarVU();
 }
 
 function stopMilonga() {
   estadoPanel = 'stopped';
   detenerAudio();
   detenerTimers();
+  detenerVU();
   activarRing(false);
   actualizarBotones();
   actualizarLiveBadge();
   resetProgressUI();
   setEl('now-name', '—');
   setEl('now-orq',  '—');
-  setEl('ia-texto', 'Milonga detenida.');
+  setEl('ia-texto', 'Radio detenida.');
   renderCola([]);
 }
 
@@ -170,134 +236,142 @@ function stopMilonga() {
 // ══════════════════════════════════════════════════════════════════════════
 
 function reproducirTema(index) {
-  if (index >= biblioteca.length) {
-    esperarNuevosTemas();
-    return;
-  }
-
+  if (index >= biblioteca.length) { esperarNuevosTemas(); return; }
   const tema = biblioteca[index];
   detenerTimers();
   detenerAudio();
   renderTemaActual(tema, index);
   renderCola(biblioteca.slice(index + 1, index + 6));
   actualizarContadorTemas();
-  reportarAlBackend(tema);
+  reportarAlBackend(tema, 0);
+
+  if (esCortina(tema)) { reproducirCortina(tema); return; }
+  if (tema.AudioURL)   { reproducirAudio(tema, 0); return; }
+
+  console.warn('Sin AudioURL — saltando:', tema.Titulo);
+  setTimeout(avanzarTema, 800);
+}
+
+function reproducirDesdeOffset(tema, offsetSeg) {
+  detenerTimers();
+  detenerAudio();
+  renderTemaActual(tema, indexActual);
+  renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
 
   if (esCortina(tema)) {
-    reproducirCortina(tema);
+    reproducirCortina(tema, offsetSeg);
     return;
   }
-
   if (tema.AudioURL) {
-    reproducirAudio(tema);
-  } else {
-    console.warn('Tema sin AudioURL — saltando:', tema.Titulo);
-    setTimeout(avanzarTema, 800);
+    reproducirAudio(tema, offsetSeg);
+    return;
   }
+  avanzarTema();
 }
 
 function avanzarTema() {
   if (estadoPanel === 'stopped' || estadoPanel === 'idle') return;
   indexActual++;
-  if (indexActual >= biblioteca.length) {
-    esperarNuevosTemas();
-    return;
-  }
+  if (indexActual >= biblioteca.length) { esperarNuevosTemas(); return; }
   reproducirTema(indexActual);
 }
 
 function esperarNuevosTemas() {
   setEl('ia-texto', 'Preparando próxima tanda…');
-  const espera = setInterval(function() {
-    if (estadoPanel === 'stopped' || estadoPanel === 'idle') {
-      clearInterval(espera);
-      return;
-    }
-    if (indexActual < biblioteca.length) {
-      clearInterval(espera);
-      reproducirTema(indexActual);
-      return;
-    }
+  const espera = setInterval(function () {
+    if (estadoPanel === 'stopped' || estadoPanel === 'idle') { clearInterval(espera); return; }
+    if (indexActual < biblioteca.length) { clearInterval(espera); reproducirTema(indexActual); return; }
     refrescarBiblioteca();
   }, 3000);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// AUDIO NATIVO
+// AUDIO NATIVO CON WEB AUDIO API
 // ══════════════════════════════════════════════════════════════════════════
 
-function reproducirAudio(tema) {
+function reproducirAudio(tema, offsetSeg) {
   const miGenId = ++audioGenId;
   const el      = new Audio();
   el.crossOrigin = 'anonymous';
   el.src         = tema.AudioURL;
-  el.volume      = knobValue / 100;
   el.preload     = 'auto';
   audioEl        = el;
 
-  el.addEventListener('loadedmetadata', function() {
-    if (audioGenId !== miGenId) return;
+  // Duración: escuchar durationchange además de loadedmetadata
+  function actualizarDuracion() {
+    if (audioGenId !== miGenId || !el.duration || isNaN(el.duration)) return;
     const tot = Math.floor(el.duration);
-    setEl('time-total', Math.floor(tot / 60) + ':' + (tot % 60).toString().padStart(2, '0'));
-  });
+    setEl('time-total', fmt(tot));
+    // Reportar duracion real al backend
+    reportarAlBackend(tema, tot);
+  }
+  el.addEventListener('loadedmetadata', actualizarDuracion);
+  el.addEventListener('durationchange',  actualizarDuracion);
 
   el.addEventListener('canplaythrough', function onReady() {
     el.removeEventListener('canplaythrough', onReady);
     if (audioGenId !== miGenId) return;
-    el.play().catch(function(err) {
+
+    try { conectarAudioEl(el); } catch(e) { console.warn('Web Audio no disponible:', e); }
+
+    if (offsetSeg > 0 && el.duration && offsetSeg < el.duration) {
+      el.currentTime = offsetSeg;
+    }
+
+    el.play().catch(function (err) {
       if (audioGenId !== miGenId) return;
-      console.warn('Error al reproducir:', err);
+      console.warn('Error reproduciendo:', err);
       avanzarTema();
     });
+
     resetProgressUI();
     activarRing(true);
+    iniciarVU();
   }, { once: true });
 
-  el.addEventListener('ended', function() {
+  el.addEventListener('ended', function () {
     if (audioGenId !== miGenId) return;
+    detenerVU();
     avanzarTema();
   });
 
-  el.addEventListener('error', function() {
+  el.addEventListener('error', function () {
     if (audioGenId !== miGenId) return;
-    console.warn('Error cargando audio — saltando:', tema.Titulo);
+    console.warn('Error de audio — saltando:', tema.Titulo);
+    detenerVU();
     avanzarTema();
   });
 
-  el.addEventListener('timeupdate', function() {
+  el.addEventListener('timeupdate', function () {
     if (audioGenId !== miGenId || !el.duration) return;
-    const pct = (el.currentTime / el.duration) * 100;
-    const pf  = document.getElementById('progress-fill');
+    const pct  = (el.currentTime / el.duration) * 100;
+    const pf   = document.getElementById('progress-fill');
     if (pf) pf.style.width = pct.toFixed(1) + '%';
-    const cur  = Math.floor(el.currentTime);
-    const rest = Math.floor(el.duration - el.currentTime);
-    setEl('time-current', fmt(cur));
-    setEl('m-tiempo',     fmt(rest));
+    setEl('time-current', fmt(el.currentTime));
+    setEl('m-tiempo',     fmt(el.duration - el.currentTime));
   });
 }
 
-function reproducirCortina(tema) {
-  const FADE_IN_MS  = 2000;
-  const FADE_OUT_MS = 4000;
-  const STEP_MS     = 50;
-  const miGenId     = ++audioGenId;
+function reproducirCortina(tema, offsetSeg) {
+  const FADE_IN  = 2000;
+  const FADE_OUT = 4000;
+  const STEP     = 50;
+  const miGenId  = ++audioGenId;
+  const durSeg   = CORTINA_DURACION_SEG;
+  const inicio   = offsetSeg || 0;
 
-  // Si no tiene audio, simular duración
   if (!tema.AudioURL) {
     activarRing(true);
-    let seg = 0;
-    const tick = setInterval(function() {
+    let seg = inicio;
+    const tick = setInterval(function () {
       if (audioGenId !== miGenId) { clearInterval(tick); return; }
       seg++;
-      const pct = Math.min((seg / CORTINA_DURACION_SEG) * 100, 100);
+      const pct = Math.min((seg / durSeg) * 100, 100);
       const pf  = document.getElementById('progress-fill');
       if (pf) pf.style.width = pct.toFixed(1) + '%';
       setEl('time-current', fmt(seg));
-      setEl('m-tiempo',     fmt(CORTINA_DURACION_SEG - seg));
-      if (seg >= CORTINA_DURACION_SEG) {
-        clearInterval(tick);
-        if (audioGenId === miGenId) avanzarTema();
-      }
+      setEl('m-tiempo',     fmt(durSeg - seg));
+      if (seg >= durSeg) { clearInterval(tick); if (audioGenId === miGenId) avanzarTema(); }
     }, 1000);
     cortinaTimer = tick;
     return;
@@ -314,58 +388,60 @@ function reproducirCortina(tema) {
     el.removeEventListener('canplaythrough', onReady);
     if (audioGenId !== miGenId) return;
 
-    el.play().catch(function() {
-      if (audioGenId === miGenId) avanzarTema();
-    });
+    try { conectarAudioEl(el); } catch(e) {}
+
+    if (inicio > 0 && el.duration && inicio < el.duration) el.currentTime = inicio;
+
+    el.play().catch(function () { if (audioGenId === miGenId) avanzarTema(); });
 
     resetProgressUI();
-    setEl('time-total', '0:' + CORTINA_DURACION_SEG);
+    setEl('time-total', fmt(durSeg));
     activarRing(true);
 
-    // Progreso manual de cortina
-    let seg = 0;
-    const tick = setInterval(function() {
+    let seg = inicio;
+    const tick = setInterval(function () {
       if (audioGenId !== miGenId) { clearInterval(tick); return; }
       seg++;
-      const pct = Math.min((seg / CORTINA_DURACION_SEG) * 100, 100);
+      const pct = Math.min((seg / durSeg) * 100, 100);
       const pf  = document.getElementById('progress-fill');
       if (pf) pf.style.width = pct.toFixed(1) + '%';
       setEl('time-current', fmt(seg));
-      setEl('m-tiempo',     fmt(CORTINA_DURACION_SEG - seg));
-      if (seg >= CORTINA_DURACION_SEG) clearInterval(tick);
+      setEl('m-tiempo',     fmt(durSeg - seg));
+      if (seg >= durSeg) clearInterval(tick);
     }, 1000);
     cortinaTimer = tick;
 
-    // Fade in
     const targetVol = knobValue / 100;
-    const stepsIn   = FADE_IN_MS / STEP_MS;
+    const stepsIn   = FADE_IN / STEP;
     const stepIn    = targetVol / stepsIn;
-    const fadeIn    = setInterval(function() {
-      if (audioGenId !== miGenId) { clearInterval(fadeIn); return; }
+    const fi = setInterval(function () {
+      if (audioGenId !== miGenId) { clearInterval(fi); return; }
       el.volume = Math.min(el.volume + stepIn, targetVol);
-      if (el.volume >= targetVol) clearInterval(fadeIn);
-    }, STEP_MS);
+      if (gainNode) gainNode.gain.value = el.volume;
+      if (el.volume >= targetVol) clearInterval(fi);
+    }, STEP);
 
-    // Fade out + avanzar
-    setTimeout(function() {
+    const restante = (durSeg - inicio) * 1000;
+    setTimeout(function () {
       if (audioGenId !== miGenId) return;
-      const stepsOut = FADE_OUT_MS / STEP_MS;
+      const stepsOut = FADE_OUT / STEP;
       const stepOut  = el.volume / stepsOut;
-      const fadeOut  = setInterval(function() {
-        if (audioGenId !== miGenId) { clearInterval(fadeOut); return; }
+      const fo = setInterval(function () {
+        if (audioGenId !== miGenId) { clearInterval(fo); return; }
         el.volume = Math.max(el.volume - stepOut, 0);
+        if (gainNode) gainNode.gain.value = el.volume;
         if (el.volume <= 0) {
-          clearInterval(fadeOut);
+          clearInterval(fo);
+          detenerVU();
           if (audioGenId === miGenId) avanzarTema();
         }
-      }, STEP_MS);
-    }, (CORTINA_DURACION_SEG * 1000) - FADE_OUT_MS);
+      }, STEP);
+    }, Math.max(restante - FADE_OUT, 0));
 
   }, { once: true });
 
-  el.addEventListener('error', function() {
+  el.addEventListener('error', function () {
     if (audioGenId !== miGenId) return;
-    console.warn('Error cargando cortina — saltando');
     avanzarTema();
   });
 }
@@ -376,62 +452,164 @@ function detenerAudio() {
     audioEl.src = '';
     audioEl     = null;
   }
+  if (sourceNode) {
+    try { sourceNode.disconnect(); } catch(e) {}
+    sourceNode = null;
+  }
   audioGenId++;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 // REPORTAR AL BACKEND
-// El backend decide si generar nueva tanda (cuando detecta cortina)
 // ══════════════════════════════════════════════════════════════════════════
 
-let ultimoIDReportado = null;
-
-function reportarAlBackend(tema) {
+function reportarAlBackend(tema, duracionSeg) {
   if (!tema || !tema.ID) return;
-  if (tema.ID === ultimoIDReportado) return;
+
+  // Solo reportar una vez por tema salvo que cambie la duración real
+  if (tema.ID === ultimoIDReportado && duracionSeg === 0) return;
   ultimoIDReportado = tema.ID;
 
   const params = new URLSearchParams({
     action:          'reportarReproduccion',
-    sesionID:        sesionActualID || '',
     ID:              tema.ID,
     Titulo:          tema.Titulo     || '',
     Orquesta:        tema.Orquesta   || '',
     Genero:          tema.Genero     || '',
     Estilo:          tema.Estilo     || '',
     Anio:            tema.Anio       || '',
+    AudioURL:        tema.AudioURL   || '',
     esCortina:       esCortina(tema) ? '1' : '0',
+    duracionSeg:     duracionSeg || 0,
     indexActual:     indexActual,
     totalBiblioteca: biblioteca.length,
   });
 
   fetch(GAS_URL + '?' + params.toString())
     .then(r => r.json())
-    .then(function(data) {
+    .then(function (data) {
       if (!data.ok) return;
 
-      // Capturar sesionID si el servidor lo devuelve
-      if (data.sesionID && !sesionActualID) {
-        sesionActualID = data.sesionID;
-      }
-
-      // Si el backend generó nueva tanda, refrescar biblioteca
       if (data.accion === 'tandaGenerada' && data.temasAgregados > 0) {
         setTimeout(refrescarBiblioteca, 2000);
       }
 
-      // Mostrar mensaje del copiloto
-      if (data.mensajeIA) {
-        setEl('ia-texto', data.mensajeIA);
-      }
+      if (data.mensajeIA) setEl('ia-texto', data.mensajeIA);
+      if (data.proximaTanda) setEl('rec-proxima', 'Próxima tanda: ' + data.proximaTanda);
 
-      if (data.proximaTanda) {
-        setEl('rec-proxima', 'Próxima tanda: ' + data.proximaTanda);
-      }
+      // Mostrar frase de introducción si hay pedido activo
+      if (data.frase) mostrarFrase(data.frase);
     })
-    .catch(function(err) {
-      console.warn('Error reportando al backend:', err.message);
-    });
+    .catch(function (e) { console.warn('Error reportando:', e.message); });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CHAT
+// ══════════════════════════════════════════════════════════════════════════
+
+function enviarChat() {
+  const input = document.getElementById('chat-input');
+  const usuario = document.getElementById('chat-usuario');
+  if (!input) return;
+
+  const msg  = (input.value || '').trim();
+  const user = (usuario ? usuario.value : '') || 'Oyente';
+  if (!msg) return;
+
+  input.value = '';
+  input.disabled = true;
+
+  fetch(GAS_URL, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ action: 'enviarChat', usuario: user, mensaje: msg }),
+  })
+    .then(r => r.json())
+    .then(function (data) {
+      input.disabled = false;
+      if (data.frase) mostrarFrase(data.frase);
+      cargarChat();
+    })
+    .catch(function () { input.disabled = false; });
+}
+
+function cargarChat() {
+  fetch(GAS_URL + '?action=getChat&limite=20')
+    .then(r => r.json())
+    .then(function (data) {
+      if (!Array.isArray(data)) return;
+      renderChat(data);
+    })
+    .catch(function () {});
+}
+
+function renderChat(mensajes) {
+  const lista = document.getElementById('chat-lista');
+  if (!lista) return;
+
+  if (!mensajes.length) {
+    lista.innerHTML = '<div class="chat-vacio">Sé el primero en saludar 🎵</div>';
+    return;
+  }
+
+  lista.innerHTML = mensajes.map(function (m) {
+    const ts    = m.Timestamp ? new Date(m.Timestamp).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '';
+    const tipo  = String(m.Tipo || '').toUpperCase();
+    const badge = tipo === 'PEDIDO'      ? '<span class="chat-badge pedido">pedido</span>'
+                : tipo === 'DEDICATORIA' ? '<span class="chat-badge dedic">dedicatoria</span>'
+                : '';
+    const texto = m.MensajeTraducido || m.MensajeOriginal || '';
+    return '<div class="chat-item">' +
+      '<span class="chat-user">' + (m.Usuario || 'anon') + '</span>' +
+      '<span class="chat-ts">'   + ts + '</span>' +
+      badge +
+      '<div class="chat-msg">'   + texto + '</div>' +
+      '</div>';
+  }).join('');
+
+  lista.scrollTop = lista.scrollHeight;
+}
+
+function iniciarChatPolling() {
+  if (chatTimer) return;
+  cargarChat();
+  chatTimer = setInterval(cargarChat, CHAT_POLLING_MS);
+}
+
+function mostrarFrase(frase) {
+  if (!frase) return;
+  setEl('ia-texto', frase);
+  mostrarToast(frase);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// POLLING Y REFRESCO
+// ══════════════════════════════════════════════════════════════════════════
+
+async function refrescarBiblioteca() {
+  try {
+    const res  = await fetch(GAS_URL + '?action=getBiblioteca');
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return;
+
+    const idsYaUsados = new Set(biblioteca.slice(0, indexActual + 1).map(t => t.ID));
+    const nuevos      = data.filter(t => !idsYaUsados.has(t.ID));
+    const longAntes   = biblioteca.length;
+
+    biblioteca = biblioteca.slice(0, indexActual + 1).concat(nuevos);
+
+    const diff = biblioteca.length - longAntes;
+    if (diff > 0) {
+      mostrarToast('+' + diff + ' tema' + (diff > 1 ? 's' : '') + ' en la radio');
+      renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
+      actualizarContadorTemas();
+    }
+  } catch (e) { console.warn('Error refrescando:', e); }
+}
+
+function iniciarPolling() {
+  if (pollingTimer) return;
+  pollingTimer = setInterval(refrescarBiblioteca, POLLING_MS);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -439,14 +617,10 @@ function reportarAlBackend(tema) {
 // ══════════════════════════════════════════════════════════════════════════
 
 function renderBibliotecaCargada() {
-  setEl('now-name', 'Listo para iniciar');
-  setEl('now-orq',  biblioteca.length + ' temas cargados');
+  setEl('now-name', 'El Manijero Radio');
+  setEl('now-orq',  biblioteca.length + ' temas listos');
   setEl('now-year', '');
-  setEl('ia-texto', 'Sistema listo. Presioná Iniciar Tanda para comenzar.');
-
-  const chips = document.getElementById('now-chips');
-  if (chips) chips.innerHTML = '<span class="chip ch-cortina">Sin datos aún</span>';
-
+  setEl('ia-texto', 'Radio lista. Presioná Play para entrar.');
   renderCola(biblioteca.slice(0, 5));
   actualizarContadorTemas();
 
@@ -469,51 +643,33 @@ function renderTemaActual(tema, index) {
     (tema.Genero ? ' · ' + tema.Genero : '') +
     (tema.Estilo ? ' · ' + tema.Estilo : '')
   );
-  setEl('m-tanda-sub', (tema.Genero || '') + ' · ' + (tema.Orquesta || ''));
+  setEl('m-tanda-sub',    (tema.Genero || '') + ' · ' + (tema.Orquesta || ''));
   setEl('ia-footer-text', 'Tema ' + (index + 1) + ' de ' + biblioteca.length);
-  setEl('badge-temas', (index + 1) + ' / ' + biblioteca.length);
-  setEl('badge-sub',   esCortina(tema) ? 'Cortina' : ('Tanda · ' + (tema.Genero || '')));
-  setEl('time-total',  esCortina(tema) ? '0:' + CORTINA_DURACION_SEG : (tema.Duracion || '—'));
+  setEl('badge-temas',    (index + 1) + ' / ' + biblioteca.length);
+  setEl('badge-sub',      esCortina(tema) ? 'Cortina' : ('Tanda · ' + (tema.Genero || '')));
+  setEl('time-total',     esCortina(tema) ? fmt(CORTINA_DURACION_SEG) : (tema.Duracion || '—'));
 
-  // Pista: mostrar estado real o aviso sin cámara
-  actualizarUIPista();
+  // Métricas — solo reales
+  setEl('meta-lufs', '—');
+  setEl('meta-gain', '—');
+  setEl('meta-tp',   '—');
+  setEl('meta-rd',   '—');
+  setEl('m-pista',        '—');
+  setEl('m-personas',     '—');
+  setEl('m-pista-sub',    'SIN CÁMARA');
+  setEl('m-personas-sub', 'SIN CÁMARA');
 
   let html = '<span class="chip ch-' + (tema.Genero || '').toLowerCase() + '">' + (tema.Genero || '?') + '</span>';
   if (tema.Estilo && !esCortina(tema)) html += '<span class="chip ch-gold">' + tema.Estilo + '</span>';
-  if (tema.BPM > 0)                   html += '<span class="chip ch-gold">' + tema.BPM + ' BPM</span>';
-  if (tema.Energia)                   html += '<span class="chip ch-gold">Energía ' + String(tema.Energia).toLowerCase() + '</span>';
-  if (!esCortina(tema))               html += '<span class="chip ch-green">✓ Audio HD</span>';
+  if (tema.Anio)                       html += '<span class="chip ch-gold">' + tema.Anio + '</span>';
+  if (!esCortina(tema))                html += '<span class="chip ch-green">✓ Audio</span>';
 
   const chips = document.getElementById('now-chips');
   if (chips) chips.innerHTML = html;
 
   setEl('ia-texto', esCortina(tema)
-    ? 'Cortina activa · se cortará a los ' + CORTINA_DURACION_SEG + 's.'
-    : 'Reproduciendo · el copiloto se actualiza al reportar al sistema.');
-
-  // Limpiar métricas — no se inventan
-  setEl('meta-lufs', '—');
-  setEl('meta-gain', '—');
-  setEl('meta-tp',   '—');
-  setEl('meta-rd',   '—');
-}
-
-function actualizarUIPista() {
-  // Sin cámara: mostrar aviso claro, no inventar datos
-  setEl('m-pista',        '—');
-  setEl('m-personas',     '—');
-  setEl('m-pista-sub',    'SIN CÁMARA ACTIVA');
-  setEl('m-personas-sub', 'SIN CÁMARA ACTIVA');
-  setEl('g-energia',      '—');
-  setEl('g-densidad',     '—');
-  setEl('g-fatiga',       '—');
-  setEl('g-conexion',     '—');
-  setEl('g-energia-sub',  'sin datos');
-  setEl('g-densidad-sub', 'sin datos');
-  setEl('g-fatiga-sub',   'sin datos');
-  setEl('g-conexion-sub', 'sin datos');
-  setEl('pv-aplausos',    '—');
-  setEl('pv-abandono',    '—');
+    ? 'Cortina · ' + CORTINA_DURACION_SEG + 's · próxima tanda en camino.'
+    : 'Reproduciendo en la radio global.');
 }
 
 function actualizarContadorTemas() {
@@ -523,12 +679,9 @@ function actualizarContadorTemas() {
   }
   const tema = biblioteca[indexActual];
   if (!tema) return;
-  if (esCortina(tema)) {
-    setEl('m-tanda', 'Cortina');
-  } else {
-    const pt = calcularPosEnTanda();
-    setEl('m-tanda', pt.pos + ' / ' + pt.total);
-  }
+  if (esCortina(tema)) { setEl('m-tanda', 'Cortina'); return; }
+  const pt = calcularPosEnTanda();
+  setEl('m-tanda', pt.pos + ' / ' + pt.total);
 }
 
 function calcularPosEnTanda() {
@@ -552,16 +705,14 @@ function renderCola(temas) {
     lista.innerHTML = '<div class="q-item"><div class="q-info"><div class="q-track">Cola vacía</div></div></div>';
     return;
   }
-  lista.innerHTML = temas.map(function(t, i) {
+  lista.innerHTML = temas.map(function (t, i) {
     const esNext = i === 0;
     const num    = indexActual + i + 2;
     return '<div class="q-item ' + (esNext ? 'q-next' : '') + '">' +
-      (esNext
-        ? '<i class="ti ti-arrow-right q-arrow"></i>'
-        : '<span class="q-num">' + num + '</span>') +
+      (esNext ? '<i class="ti ti-arrow-right q-arrow"></i>' : '<span class="q-num">' + num + '</span>') +
       '<div class="q-info">' +
         '<div class="q-track">' + (t.Titulo || '—') + ' · ' + (t.Orquesta || '—') + '</div>' +
-        '<div class="q-orq">' + (esCortina(t) ? '0:45' : (t.Duracion || '—')) + ' · ' + (t.Estilo || '') + '</div>' +
+        '<div class="q-orq">'  + (esCortina(t) ? fmt(CORTINA_DURACION_SEG) : (t.Duracion || '—')) + ' · ' + (t.Estilo || '') + '</div>' +
       '</div>' +
       '<span class="chip ch-' + (t.Genero || '').toLowerCase() + '">' + (t.Genero || '') + '</span>' +
       '</div>';
@@ -573,22 +724,20 @@ function actualizarBotones() {
   const bp = document.getElementById('btn-pausar');
   const bs = document.getElementById('btn-stop');
   if (!bi) return;
-
   if (estadoPanel === 'idle' || estadoPanel === 'stopped') {
-    bi.disabled = !biblioteca.length;
-    bi.innerHTML = '<i class="ti ti-player-play"></i> Iniciar Tanda';
-    bp.disabled  = true;
-    bs.disabled  = true;
+    bi.disabled  = !biblioteca.length;
+    bi.innerHTML = '<i class="ti ti-player-play"></i> Entrar a la radio';
+    if (bp) bp.disabled = true;
+    if (bs) bs.disabled = true;
   } else if (estadoPanel === 'playing') {
     bi.disabled  = true;
-    bp.disabled  = false;
-    bs.disabled  = false;
-    bp.innerHTML = '<i class="ti ti-player-pause"></i> Pausar';
+    if (bp) { bp.disabled = false; bp.innerHTML = '<i class="ti ti-player-pause"></i> Pausar'; }
+    if (bs) bs.disabled = false;
   } else if (estadoPanel === 'paused') {
     bi.disabled  = false;
     bi.innerHTML = '<i class="ti ti-player-play"></i> Continuar';
-    bp.disabled  = true;
-    bs.disabled  = false;
+    if (bp) bp.disabled = true;
+    if (bs) bs.disabled = false;
   }
 }
 
@@ -596,21 +745,12 @@ function actualizarLiveBadge() {
   const b = document.getElementById('live-badge');
   if (!b) return;
   if (estadoPanel === 'playing') {
-    b.innerHTML = '<div class="live-dot"></div><span> En vivo · reproduciendo</span>';
+    b.innerHTML = '<div class="live-dot"></div><span> EN VIVO · Radio global</span>';
   } else if (estadoPanel === 'paused') {
     b.innerHTML = '<div class="live-dot" style="background:#c9a84c;animation:none"></div><span> En pausa</span>';
   } else {
     b.innerHTML = '<div class="live-dot" style="background:#555;animation:none"></div><span> Detenido</span>';
   }
-}
-
-function mostrarModo(modo) {
-  const modos = {
-    RADIO:   'Modo Radio IA',
-    DJ_AUTO: 'Modo DJ Automático',
-    MILONGA: 'Modo Milonga Pro',
-  };
-  setEl('evento-nombre', modos[modo] || 'El Manijero');
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -620,50 +760,39 @@ function mostrarModo(modo) {
 function drawKnob(value) {
   const canvas = document.getElementById('knob-canvas');
   if (!canvas) return;
-  const W   = canvas.width, H = canvas.height;
+  const W = canvas.width, H = canvas.height;
   const ctx = canvas.getContext('2d');
-  const cx  = W / 2, cy = H / 2;
-  const r   = W * 0.38, lw = W * 0.075;
+  const cx = W / 2, cy = H / 2;
+  const r = W * 0.38, lw = W * 0.075;
 
   ctx.clearRect(0, 0, W, H);
-
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0.75 * Math.PI, 2.25 * Math.PI);
   ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-  ctx.lineWidth   = lw;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
+  ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
 
   const grad = ctx.createLinearGradient(cx - r, cy, cx + r, cy);
-  grad.addColorStop(0, '#5C0E0E');
-  grad.addColorStop(1, '#C9924A');
+  grad.addColorStop(0, '#5C0E0E'); grad.addColorStop(1, '#C9924A');
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0.75 * Math.PI, (0.75 + (value / 100) * 1.5) * Math.PI);
-  ctx.strokeStyle = grad;
-  ctx.lineWidth   = lw;
-  ctx.lineCap     = 'round';
-  ctx.stroke();
+  ctx.strokeStyle = grad; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
 
   const angle = (0.75 + (value / 100) * 1.5) * Math.PI;
   ctx.beginPath();
   ctx.arc(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, lw * 0.7, 0, Math.PI * 2);
-  ctx.fillStyle = '#E8B870';
-  ctx.fill();
+  ctx.fillStyle = '#E8B870'; ctx.fill();
 
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
-  ctx.fillStyle   = '#1A1008';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(201,146,74,0.2)';
-  ctx.lineWidth   = 1;
-  ctx.stroke();
+  ctx.fillStyle = '#1A1008'; ctx.fill();
+  ctx.strokeStyle = 'rgba(201,146,74,0.2)'; ctx.lineWidth = 1; ctx.stroke();
 
   const db = -40 + (value / 100) * 52;
   setEl('knob-db', (db > 0 ? '+' : '') + db.toFixed(1) + ' dB');
 }
 
 function getEventY(e) {
-  if (e.touches && e.touches.length > 0)              return e.touches[0].clientY;
+  if (e.touches && e.touches.length > 0)               return e.touches[0].clientY;
   if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientY;
   return e.clientY;
 }
@@ -672,58 +801,42 @@ function initKnob() {
   const canvas = document.getElementById('knob-canvas');
   if (!canvas) return;
   drawKnob(knobValue);
-  canvas.addEventListener('mousedown',  function(e) {
+  canvas.addEventListener('mousedown', function (e) {
     knobDragging = true; knobStartY = getEventY(e); knobStartVal = knobValue; e.preventDefault();
   });
-  window.addEventListener('mousemove', function(e) {
+  window.addEventListener('mousemove', function (e) {
     if (!knobDragging) return;
-    const delta = (knobStartY - getEventY(e)) * 0.6;
-    knobValue   = Math.max(0, Math.min(100, knobStartVal + delta));
+    knobValue = Math.max(0, Math.min(100, knobStartVal + (knobStartY - getEventY(e)) * 0.6));
     drawKnob(knobValue);
     const s = document.getElementById('vol');
     const o = document.getElementById('vol-out');
-    if (s) s.value       = Math.round(knobValue);
+    if (s) s.value = Math.round(knobValue);
     if (o) o.textContent = Math.round(knobValue);
-    if (audioEl) audioEl.volume = Math.round(knobValue) / 100;
+    if (gainNode) gainNode.gain.value = knobValue / 100;
     e.preventDefault();
   });
-  window.addEventListener('mouseup', function() { knobDragging = false; });
-  canvas.addEventListener('touchstart', function(e) {
+  window.addEventListener('mouseup', function () { knobDragging = false; });
+  canvas.addEventListener('touchstart', function (e) {
     knobDragging = true; knobStartY = getEventY(e); knobStartVal = knobValue; e.preventDefault();
   }, { passive: false });
-  canvas.addEventListener('touchmove', function(e) {
+  canvas.addEventListener('touchmove', function (e) {
     if (!knobDragging) return;
-    const delta = (knobStartY - getEventY(e)) * 0.6;
-    knobValue   = Math.max(0, Math.min(100, knobStartVal + delta));
+    knobValue = Math.max(0, Math.min(100, knobStartVal + (knobStartY - getEventY(e)) * 0.6));
     drawKnob(knobValue);
-    if (audioEl) audioEl.volume = Math.round(knobValue) / 100;
+    if (gainNode) gainNode.gain.value = knobValue / 100;
     e.preventDefault();
   }, { passive: false });
-  canvas.addEventListener('touchend', function() { knobDragging = false; });
+  canvas.addEventListener('touchend', function () { knobDragging = false; });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 // HELPERS UI
 // ══════════════════════════════════════════════════════════════════════════
 
-function esCortina(t) {
-  return String(t.Genero || '').trim().toLowerCase() === 'cortina';
-}
-
-function fmt(seg) {
-  const s = Math.max(0, Math.floor(seg));
-  return Math.floor(s / 60) + ':' + (s % 60).toString().padStart(2, '0');
-}
-
-function setEl(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
-
-function activarRing(on) {
-  const r = document.querySelector('.album-spinning-ring');
-  if (r) r.classList[on ? 'add' : 'remove']('active');
-}
+function esCortina(t) { return String(t.Genero || '').trim().toLowerCase() === 'cortina'; }
+function fmt(seg) { const s = Math.max(0, Math.floor(seg)); return Math.floor(s / 60) + ':' + (s % 60).toString().padStart(2, '0'); }
+function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function activarRing(on) { const r = document.querySelector('.album-spinning-ring'); if (r) r.classList[on ? 'add' : 'remove']('active'); }
 
 function resetProgressUI() {
   const pf = document.getElementById('progress-fill');
@@ -740,7 +853,7 @@ function detenerTimers() {
 function mostrarEstadoCarga(msg) {
   const el = document.getElementById('carga-estado');
   if (!el) return;
-  el.textContent = msg || '';
+  el.textContent   = msg || '';
   el.style.display = msg ? 'block' : 'none';
 }
 
@@ -756,9 +869,9 @@ function mostrarToast(msg) {
       'font-family:Oswald,sans-serif;letter-spacing:1px';
     document.body.appendChild(t);
   }
-  t.textContent    = msg;
-  t.style.opacity  = '1';
-  setTimeout(function() { t.style.opacity = '0'; }, 3000);
+  t.textContent   = msg;
+  t.style.opacity = '1';
+  setTimeout(function () { t.style.opacity = '0'; }, 4000);
 }
 
 function updateClock() {
@@ -770,19 +883,36 @@ function updateClock() {
 }
 
 function initSliders() {
-  ['vol','bass','treble'].forEach(function(id) {
-    const s = document.getElementById(id);
-    const o = document.getElementById(id + '-out');
-    if (!s || !o) return;
-    s.addEventListener('input', function() {
-      o.textContent = Math.round(s.value);
-      if (id === 'vol') {
-        knobValue = parseInt(s.value);
-        drawKnob(knobValue);
-        if (audioEl) audioEl.volume = knobValue / 100;
-      }
+  const vol = document.getElementById('vol');
+  const volOut = document.getElementById('vol-out');
+  if (vol) {
+    vol.addEventListener('input', function () {
+      knobValue = parseInt(vol.value);
+      drawKnob(knobValue);
+      if (volOut) volOut.textContent = Math.round(knobValue);
+      if (gainNode) gainNode.gain.value = knobValue / 100;
     });
-  });
+  }
+
+  const bass = document.getElementById('bass');
+  if (bass) {
+    bass.addEventListener('input', function () {
+      const v = ((parseInt(bass.value) - 50) / 50) * 15;
+      if (bassFilter) bassFilter.gain.value = v;
+      const o = document.getElementById('bass-out');
+      if (o) o.textContent = Math.round(bass.value);
+    });
+  }
+
+  const treble = document.getElementById('treble');
+  if (treble) {
+    treble.addEventListener('input', function () {
+      const v = ((parseInt(treble.value) - 50) / 50) * 15;
+      if (trebleFilter) trebleFilter.gain.value = v;
+      const o = document.getElementById('treble-out');
+      if (o) o.textContent = Math.round(treble.value);
+    });
+  }
 }
 
 function handleResize() {
@@ -792,4 +922,4 @@ function handleResize() {
   if (ev) ev.width = ev.offsetWidth  || 300;
 }
 
-console.log('El Manijero panel v2.0 · listo');
+console.log('El Manijero Radio v2.1 · listo');
