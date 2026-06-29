@@ -1,0 +1,337 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>El Manijero · TDJ Tango</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&family=Oswald:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+
+  <div id="yt-player" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;" aria-hidden="true"></div>
+  <div class="bg-overlay"></div>
+
+  <div id="app">
+
+    <!-- ═══════════════════════════════════════════════════════ TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="https://res.cloudinary.com/dwgwbdtud/image/upload/v1781838389/zcl7vri8xmrryanv6s2l.png"
+          alt="El Manijero" class="logo-img"
+          onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='flex';" />
+        <div class="logo-fallback" id="logo-fallback" style="display:none">
+          <span class="logo-text">El <span class="logo-accent">Manijero</span></span>
+          <span class="logo-sub">TANGO DJ</span>
+        </div>
+      </div>
+      <div class="topbar-center">
+        <div class="evento-nombre" id="evento-nombre">Milonga San Telmo</div>
+        <div class="evento-meta">
+          <span id="evento-fecha">Sábado 14 jun</span>
+          <span class="sep-dot">·</span>
+          <span id="evento-hora">--:--</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="tanda-badge" id="tanda-badge">
+          <div class="tanda-badge-num"><i class="ti ti-music"></i> <span id="badge-temas">— temas</span></div>
+          <div class="tanda-badge-sub" id="badge-sub">Cargando…</div>
+        </div>
+        <div class="live-badge" id="live-badge">
+          <div class="live-dot"></div>
+          <span>Cargando biblioteca…</span>
+        </div>
+        <button class="btn-icon" title="Configuración"><i class="ti ti-settings"></i></button>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════ CONTROLES -->
+    <section class="controles-milonga">
+      <div class="controles-wrap">
+        <button id="btn-iniciar" class="btn-control btn-play" onclick="iniciarMilonga()" disabled>
+          <i class="ti ti-player-play"></i> Iniciar Tanda
+        </button>
+        <button id="btn-pausar" class="btn-control btn-pause" onclick="pausarMilonga()" disabled>
+          <i class="ti ti-player-pause"></i> Pausar
+        </button>
+        <button id="btn-stop" class="btn-control btn-stop" onclick="stopMilonga()" disabled>
+          <i class="ti ti-player-stop"></i> Stop
+        </button>
+        <div id="carga-estado" class="carga-estado" style="display:none"></div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════ LAYOUT PRINCIPAL -->
+    <div class="layout-grid">
+
+      <!-- ① SONANDO AHORA — order mobile: 1 -->
+      <div class="card card-now area-now">
+        <div class="card-eyebrow">Sonando ahora</div>
+        <div class="now-inner">
+          <div class="album-art">
+            <div class="album-placeholder"><i class="ti ti-vinyl"></i></div>
+            <div class="album-spinning-ring"></div>
+          </div>
+          <div class="now-details">
+            <div class="now-track" id="now-name">Esperando inicio</div>
+            <div class="now-orq" id="now-orq">Presioná "Iniciar Tanda" para comenzar</div>
+            <div class="now-year" id="now-year">—</div>
+            <div class="chips" id="now-chips">
+              <span class="chip ch-cortina">Sin datos aún</span>
+            </div>
+            <div class="audio-meta">
+              <span class="meta-item"><span class="meta-label">LUFS</span><span class="meta-val" id="meta-lufs">—</span></span>
+              <span class="meta-sep">·</span>
+              <span class="meta-item"><span class="meta-label">GAIN</span><span class="meta-val" id="meta-gain">—</span></span>
+              <span class="meta-item"><span class="meta-label">TRUE PEAK</span><span class="meta-val" id="meta-tp">—</span></span>
+              <span class="meta-sep">·</span>
+              <span class="meta-item"><span class="meta-label">RANGO DIN.</span><span class="meta-val" id="meta-rd">—</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="waveform-wrap">
+          <canvas id="waveform-canvas" class="waveform-canvas" height="56"></canvas>
+        </div>
+        <div class="vu-wrap">
+          <div class="vu-meter">
+            <span class="vu-label">L</span>
+            <div class="vu-bar-wrap"><canvas id="vu-left" class="vu-canvas" width="12" height="80"></canvas></div>
+          </div>
+          <div class="vu-meter">
+            <span class="vu-label">R</span>
+            <div class="vu-bar-wrap"><canvas id="vu-right" class="vu-canvas" width="12" height="80"></canvas></div>
+          </div>
+          <div class="vu-scale">
+            <span>0</span><span>-6</span><span>-12</span><span>-18</span><span>-24</span><span>-∞</span>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bg"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+          <div class="progress-times">
+            <span id="time-current">0:00</span>
+            <span id="time-total">0:00</span>
+          </div>
+        </div>
+        <div class="now-footer">
+          <div class="ia-inline">
+            <i class="ti ti-cpu"></i>
+            <span id="ia-footer-text">IA sin datos de pista · reproducción en orden de biblioteca</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ② TANDA ACTUAL — order mobile: 2 -->
+      <div class="card card-tanda area-tanda">
+        <div class="card-eyebrow">
+          Tanda actual
+          <span class="tanda-counter" id="tanda-counter">1 / 4</span>
+        </div>
+        <div class="queue-list" id="queue-list">
+          <div class="q-item">
+            <div class="q-info">
+              <div class="q-track">Cargando biblioteca…</div>
+              <div class="q-orq">los temas aparecerán aquí</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+     
+
+      <!-- ④ AUDIO IA — order mobile: 4 -->
+      <div class="card card-audio area-audio">
+        <div class="card-eyebrow">Audio · control IA</div>
+        <div class="knob-wrap">
+          <div class="knob-label">VOLUMEN GENERAL</div>
+          <div class="knob-container">
+            <canvas id="knob-canvas" width="100" height="100"></canvas>
+            <div class="knob-db" id="knob-db">-12.0 dB</div>
+          </div>
+        </div>
+        <div class="vol-rows">
+          <div class="v-row">
+            <span class="v-label">Volumen</span>
+            <input type="range" min="0" max="100" value="72" step="1" id="vol">
+            <span class="v-val" id="vol-out">72</span>
+          </div>
+          <div class="v-row">
+            <span class="v-label">Graves</span>
+            <input type="range" min="0" max="100" value="55" step="1" id="bass">
+            <span class="v-val" id="bass-out">55</span>
+          </div>
+          <div class="v-row">
+            <span class="v-label">Agudos</span>
+            <input type="range" min="0" max="100" value="48" step="1" id="treble">
+            <span class="v-val" id="treble-out">48</span>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <div class="vu-vertical-wrap">
+          <div class="vu-v-meter">
+            <div class="vu-v-bar"><div class="vu-v-fill" id="vu-vf-left" style="height:0%"></div></div>
+            <span class="vu-v-label">L</span>
+          </div>
+          <div class="vu-v-meter">
+            <div class="vu-v-bar"><div class="vu-v-fill" id="vu-vf-right" style="height:0%"></div></div>
+            <span class="vu-v-label">R</span>
+          </div>
+          <div class="vu-v-scale">
+            <span>0</span><span>-6</span><span>-12</span><span>-18</span><span>-24</span><span>-∞</span>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <div class="status-list">
+          <div class="status-row"><span class="status-label">Normalización LUFS</span><span class="status-on"><i class="ti ti-check"></i> Activa</span></div>
+          <div class="status-row"><span class="status-label">Fade automático</span><span class="status-on"><i class="ti ti-check"></i> Activo</span></div>
+          <div class="status-row"><span class="status-label">Ajuste por ruido</span><span class="status-on"><i class="ti ti-check"></i> Activo</span></div>
+          <div class="status-row"><span class="status-label">Crossfade</span><span class="status-cross">8 seg <i class="ti ti-chevron-down"></i></span></div>
+          <div class="status-row"><span class="status-label">Modo</span><span class="status-auto"><i class="ti ti-list-numbers"></i> Orden biblioteca</span></div>
+        </div>
+        <div class="sep"></div>
+        <div class="card-eyebrow" style="margin-bottom:10px">Pedidos del público</div>
+        <div class="pedidos" id="pedidos-list">
+          <div class="ped-item" style="opacity:0.5">
+            <div class="ped-info">
+              <div class="ped-song">Sin pedidos aún</div>
+              <div class="ped-mesa">los pedidos aparecen cuando la milonga está en curso</div>
+            </div>
+          </div>
+          <div class="ped-qr">
+            <i class="ti ti-qrcode"></i>
+            <span>Los invitados piden escaneando el QR de la mesa</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑤ COPILOTO — order mobile: 5 -->
+      <div class="card card-copiloto area-copiloto">
+        <div class="card-eyebrow">Copiloto El Manijero</div>
+        <div class="copiloto-inner">
+          <img src="https://res.cloudinary.com/dwgwbdtud/image/upload/v1781831795/z8prgersqwl3z0njcjp1.png"
+            alt="El Manijero" class="copiloto-avatar"
+            onerror="this.style.display='none'" />
+          <div class="copiloto-bubble">
+            <div class="ia-text" id="ia-texto">Sin datos de pista todavía. La IA se activará cuando haya información de la milonga.</div>
+          </div>
+        </div>
+        <div class="copiloto-rec">
+          <div class="rec-label">Recomendación</div>
+          <div class="rec-val" id="rec-proxima">Próximo: —</div>
+        </div>
+        <div class="copiloto-ventana">
+          <div class="ventana-label"><i class="ti ti-clock"></i> Ventana ideal</div>
+          <div class="ventana-val" id="ventana-val">— temas más</div>
+        </div>
+        <div class="ajustes-aplicados">
+          <div class="aj-label">Ajustes aplicados automáticamente</div>
+          <div class="aj-chips">
+            <span class="aj-chip" id="aj-gain">GAIN —</span>
+            <span class="aj-chip" id="aj-eq">EQ —</span>
+            <span class="aj-chip" id="aj-lufs">LUFS —</span>
+            <span class="aj-chip" id="aj-tp">TP —</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑥ LECTURA DE PISTA — order mobile: 6 -->
+      <div class="card card-pista area-pista">
+        <div class="card-eyebrow">Lectura de pista en vivo</div>
+        <div class="gauges-grid">
+          <div class="gauge-item">
+            <div class="gauge-header">🔥 ENERGÍA</div>
+            <canvas id="gauge-energia" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-energia">—</div>
+            <div class="gauge-sub" id="g-energia-sub">—</div>
+          </div>
+          <div class="gauge-item">
+            <div class="gauge-header">👥 DENSIDAD</div>
+            <canvas id="gauge-densidad" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-densidad">—</div>
+            <div class="gauge-sub" id="g-densidad-sub">—</div>
+          </div>
+          <div class="gauge-item">
+            <div class="gauge-header">〰️ FATIGA</div>
+            <canvas id="gauge-fatiga" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-fatiga">—</div>
+            <div class="gauge-sub" id="g-fatiga-sub">—</div>
+          </div>
+          <div class="gauge-item">
+            <div class="gauge-header">❤️ CONEXIÓN</div>
+            <canvas id="gauge-conexion" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-conexion">—</div>
+            <div class="gauge-sub" id="g-conexion-sub">—</div>
+          </div>
+        </div>
+        <div class="pista-meta">
+          <div class="pm-item">
+            <span class="pm-label"><i class="ti ti-users"></i> Personas</span>
+            <span class="pm-val" id="m-personas">—</span>
+            <span class="pm-sub" id="m-personas-sub">sin datos</span>
+          </div>
+          <div class="pm-item pm-gold">
+            <span class="pm-label"><i class="ti ti-user-check"></i> En pista</span>
+            <span class="pm-val" id="m-pista">—</span>
+            <span class="pm-sub" id="m-pista-sub">sin datos</span>
+          </div>
+          <div class="pm-item">
+            <span class="pm-label"><i class="ti ti-clock"></i> Restante</span>
+            <span class="pm-val" id="m-tiempo">—</span>
+            <span class="pm-sub">sin datos</span>
+          </div>
+        </div>
+        <div class="evolucion-wrap">
+          <div class="evolucion-label">EVOLUCIÓN DE ENERGÍA</div>
+          <canvas id="evolucion-canvas" class="evolucion-canvas" height="48"></canvas>
+          <div class="evolucion-axis">
+            <span id="evo-t-start">17:00</span>
+            <span id="evo-t-end">18:00</span>
+          </div>
+        </div>
+        <div class="pista-rows">
+          <div class="p-row">
+            <span class="p-label">Aplausos</span>
+            <div class="p-bar"><div class="p-fill fill-a" style="width:0%" id="bar-aplausos"></div></div>
+            <span class="p-val" id="pv-aplausos">—</span>
+          </div>
+          <div class="p-row">
+            <span class="p-label">Abandono</span>
+            <div class="p-bar"><div class="p-fill fill-r" style="width:0%" id="bar-abandono"></div></div>
+            <span class="p-val" id="pv-abandono">—</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.layout-grid -->
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <div class="footer-meta">
+        <span class="footer-tema" id="m-tanda-sub">—</span>
+        <span class="sep-dot">·</span>
+        <span class="footer-count" id="m-tanda">0 / 0</span>
+      </div>
+      <div class="cartelito">
+        <img src="https://res.cloudinary.com/TU_CLOUD_NAME/image/upload/TU_CARTELITO.png"
+          alt="El Manijero · Tango DJ · Corazón de Tango" class="cartelito-img"
+          onerror="this.style.display='none';document.getElementById('cartelito-fallback').style.display='flex';" />
+        <div class="cartelito-fallback" id="cartelito-fallback" style="display:none">
+          <div class="cf-titulo">EL MANIJERO</div>
+          <div class="cf-sub">TANGO DJ</div>
+          <div class="cf-tag">CORAZÓN DE TANGO</div>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
+
+HTML done
+Listo
