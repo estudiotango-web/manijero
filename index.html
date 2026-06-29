@@ -5,564 +5,639 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>El Manijero Radio · Tango 24hs</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&family=Oswald:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="panel.css">
   <style>
     /* ── Chat ─────────────────────────────────────────────────────────── */
     .chat-panel {
-      background: rgba(10,6,2,0.7);
-      border: 1px solid rgba(201,146,74,0.15);
-      border-radius: 10px;
-      padding: 0;
       display: flex;
       flex-direction: column;
-      height: 420px;
+      height: 380px;
       overflow: hidden;
     }
-    .chat-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(201,146,74,0.12);
-      font-family: 'Oswald', sans-serif;
-      font-size: 11px;
-      letter-spacing: 2px;
-      color: #c9924a;
-      text-transform: uppercase;
+    .chat-usuario-wrap {
       display: flex;
       align-items: center;
       gap: 8px;
+      margin-bottom: 10px;
+    }
+    .chat-usuario-wrap label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--crema3);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .chat-usuario-wrap input {
+      background: transparent;
+      border: none;
+      border-bottom: 0.5px solid var(--oro-border);
+      color: var(--oro-claro);
+      font-family: 'Oswald', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1px;
+      outline: none;
+      width: 110px;
+      padding: 2px 4px;
     }
     .chat-lista {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 16px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
+      padding-right: 4px;
       scrollbar-width: thin;
-      scrollbar-color: rgba(201,146,74,0.2) transparent;
+      scrollbar-color: rgba(201,146,74,0.15) transparent;
     }
     .chat-item {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 6px;
-      font-size: 13px;
+      gap: 5px;
     }
     .chat-user {
       font-family: 'Oswald', sans-serif;
-      font-size: 11px;
-      color: #c9924a;
+      font-size: 10px;
+      color: var(--oro);
       letter-spacing: 1px;
       text-transform: uppercase;
+      flex-shrink: 0;
     }
     .chat-ts {
-      font-size: 10px;
-      color: rgba(255,255,255,0.25);
+      font-size: 9px;
+      color: var(--crema3);
+      flex-shrink: 0;
+    }
+    .chat-badge {
+      font-family: 'Oswald', sans-serif;
+      font-size: 8px;
+      letter-spacing: 1px;
+      padding: 1px 5px;
+      border-radius: 2px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .chat-badge.pedido  {
+      background: var(--oro-dim);
+      color: var(--oro-claro);
+      border: 0.5px solid var(--oro-border);
+    }
+    .chat-badge.dedic   {
+      background: var(--rojo-dim);
+      color: #E87070;
+      border: 0.5px solid var(--rojo-border);
     }
     .chat-msg {
       width: 100%;
-      color: rgba(255,255,255,0.75);
-      font-family: 'EB Garamond', serif;
-      font-size: 14px;
-      line-height: 1.4;
+      color: var(--crema2);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+      font-style: italic;
     }
-    .chat-badge {
-      font-size: 9px;
-      font-family: 'Oswald', sans-serif;
-      letter-spacing: 1px;
-      padding: 1px 6px;
-      border-radius: 3px;
-      text-transform: uppercase;
-    }
-    .chat-badge.pedido  { background: rgba(201,146,74,0.2); color: #c9924a; }
-    .chat-badge.dedic   { background: rgba(92,14,14,0.4);   color: #e88; }
     .chat-vacio {
-      color: rgba(255,255,255,0.25);
-      font-size: 13px;
+      color: var(--crema3);
+      font-size: 12px;
       text-align: center;
-      padding: 20px;
-      font-family: 'EB Garamond', serif;
+      padding: 20px 0;
+      font-family: 'Playfair Display', serif;
       font-style: italic;
     }
     .chat-input-row {
       display: flex;
-      gap: 8px;
-      padding: 10px 16px;
-      border-top: 1px solid rgba(201,146,74,0.12);
-      background: rgba(0,0,0,0.3);
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 0.5px solid var(--border-soft);
     }
     .chat-input-row input[type="text"] {
       flex: 1;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(201,146,74,0.2);
-      border-radius: 5px;
-      color: #f0e6d3;
-      font-family: 'EB Garamond', serif;
-      font-size: 14px;
-      padding: 7px 10px;
+      background: rgba(255,255,255,0.03);
+      border: 0.5px solid var(--border);
+      border-radius: 4px;
+      color: var(--crema);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      padding: 6px 10px;
       outline: none;
       transition: border-color .2s;
+      min-width: 0;
     }
     .chat-input-row input[type="text"]:focus {
-      border-color: rgba(201,146,74,0.5);
+      border-color: var(--oro-border);
     }
     .chat-input-row input[type="text"]::placeholder {
-      color: rgba(255,255,255,0.2);
+      color: var(--crema3);
+      font-style: italic;
     }
     .chat-send-btn {
-      background: rgba(201,146,74,0.15);
-      border: 1px solid rgba(201,146,74,0.3);
-      color: #c9924a;
-      border-radius: 5px;
-      padding: 7px 14px;
-      font-family: 'Oswald', sans-serif;
-      font-size: 12px;
-      letter-spacing: 1px;
-      cursor: pointer;
-      transition: background .2s;
-    }
-    .chat-send-btn:hover { background: rgba(201,146,74,0.25); }
-
-    /* ── Historial ────────────────────────────────────────────────────── */
-    .historial-panel {
-      background: rgba(10,6,2,0.7);
-      border: 1px solid rgba(201,146,74,0.15);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .historial-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(201,146,74,0.12);
+      background: var(--rojo-dim);
+      border: 0.5px solid var(--rojo-border);
+      color: #E87070;
+      border-radius: 4px;
+      padding: 6px 12px;
       font-family: 'Oswald', sans-serif;
       font-size: 11px;
-      letter-spacing: 2px;
-      color: #c9924a;
-      text-transform: uppercase;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: background .15s;
+      flex-shrink: 0;
     }
+    .chat-send-btn:hover { background: rgba(139,26,26,0.3); }
+
+    /* ── Historial ────────────────────────────────────────────────────── */
     .historial-lista {
-      padding: 8px 0;
-      max-height: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 200px;
       overflow-y: auto;
       scrollbar-width: thin;
-      scrollbar-color: rgba(201,146,74,0.2) transparent;
+      scrollbar-color: rgba(201,146,74,0.15) transparent;
     }
     .historial-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 7px 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
-      font-size: 13px;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 0.5px solid var(--border-soft);
     }
     .historial-item:last-child { border-bottom: none; }
-    .historial-num {
+    .historial-ts {
       font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      color: rgba(201,146,74,0.4);
-      width: 18px;
-      text-align: right;
+      font-size: 9px;
+      color: var(--crema3);
+      width: 36px;
       flex-shrink: 0;
+      text-align: right;
     }
     .historial-info { flex: 1; min-width: 0; }
     .historial-titulo {
-      color: rgba(255,255,255,0.8);
-      font-family: 'Oswald', sans-serif;
-      font-size: 12px;
+      font-size: 11px;
+      color: var(--crema);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .historial-orq {
-      color: rgba(255,255,255,0.3);
-      font-size: 11px;
+      font-size: 10px;
+      color: var(--crema3);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    /* ── VU meter ─────────────────────────────────────────────────────── */
-    .vu-wrap {
-      display: flex;
-      align-items: flex-end;
-      gap: 3px;
-      height: 32px;
-    }
-    .vu-bar {
-      width: 6px;
-      border-radius: 2px;
-      background: linear-gradient(to top, #c9924a, #e8b870);
-      transition: height .08s;
-      height: 0%;
-    }
-
-    /* ── Nombre usuario chat ──────────────────────────────────────────── */
-    .chat-usuario-wrap {
-      padding: 8px 16px 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .chat-usuario-wrap label {
-      font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      letter-spacing: 1px;
-      color: rgba(201,146,74,0.5);
-      text-transform: uppercase;
-    }
-    .chat-usuario-wrap input {
-      background: transparent;
-      border: none;
-      border-bottom: 1px solid rgba(201,146,74,0.2);
-      color: #c9924a;
-      font-family: 'Oswald', sans-serif;
-      font-size: 12px;
-      letter-spacing: 1px;
-      outline: none;
-      width: 120px;
-      padding: 2px 4px;
-    }
+    /* ── VU real (barras verticales reales desde analyser) ────────────── */
+    #vu-vf-left, #vu-vf-right { transition: height 0.08s linear; }
   </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════
-     HEADER
-════════════════════════════════════════════════════════════ -->
-<header class="top-bar">
-  <div class="top-bar-left">
-    <div class="logo-mark">M</div>
-    <div class="logo-text">
-      <span class="logo-title">El Manijero</span>
-      <span class="logo-sub">RADIO · TANGO 24HS</span>
-    </div>
-  </div>
+  <div class="bg-overlay"></div>
 
-  <div id="live-badge" class="live-badge">
-    <div class="live-dot" style="background:#555;animation:none"></div>
-    <span> Conectando…</span>
-  </div>
+  <div id="app">
 
-  <div class="top-bar-right">
-    <div class="event-meta">
-      <span id="evento-nombre" class="event-name">El Manijero Radio</span>
-      <span id="evento-hora"   class="event-time">—:—</span>
-      <span id="evento-fecha"  class="event-date">—</span>
-    </div>
-  </div>
-</header>
-
-<!-- carga -->
-<div id="carga-estado" style="display:none;text-align:center;padding:12px;color:#c9924a;font-family:Oswald,sans-serif;letter-spacing:2px;font-size:12px;"></div>
-
-<!-- ═══════════════════════════════════════════════════════════
-     LAYOUT PRINCIPAL
-════════════════════════════════════════════════════════════ -->
-<main class="main-layout">
-
-  <!-- ── COLUMNA IZQUIERDA ───────────────────────────────────── -->
-  <aside class="col-left">
-
-    <!-- Reproductor -->
-    <section class="player-card">
-      <div class="album-art">
-        <div class="album-spinning-ring"></div>
-        <div class="album-center">
-          <span class="album-icon">♩</span>
+    <!-- ═══════════════════════════════════════════════════════ TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="https://res.cloudinary.com/dwgwbdtud/image/upload/v1781838389/zcl7vri8xmrryanv6s2l.png"
+          alt="El Manijero" class="logo-img"
+          onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='flex';" />
+        <div class="logo-fallback" id="logo-fallback" style="display:none">
+          <span class="logo-text">El <span class="logo-accent">Manijero</span></span>
+          <span class="logo-sub">RADIO · TANGO 24HS</span>
         </div>
       </div>
 
-      <div class="now-info">
-        <div id="now-name" class="now-name">El Manijero Radio</div>
-        <div id="now-orq"  class="now-orq">Conectando…</div>
-        <div id="now-year" class="now-year"></div>
-        <div id="now-chips" class="chips-row"></div>
-      </div>
-
-      <!-- Barra de progreso -->
-      <div class="progress-wrap">
-        <span id="time-current" class="time-label">0:00</span>
-        <div class="progress-bar">
-          <div id="progress-fill" class="progress-fill" style="width:0%"></div>
+      <div class="topbar-center">
+        <div class="evento-nombre" id="evento-nombre">El Manijero Radio</div>
+        <div class="evento-meta">
+          <span id="evento-fecha">—</span>
+          <span class="sep-dot">·</span>
+          <span id="evento-hora">—:—</span>
         </div>
-        <span id="time-total" class="time-label">0:00</span>
       </div>
 
-      <!-- Controles -->
-      <div class="controls-row">
-        <button id="btn-iniciar" class="btn-ctrl btn-play" onclick="iniciarMilonga()">
+      <div class="topbar-right">
+        <div class="tanda-badge" id="tanda-badge">
+          <div class="tanda-badge-num"><i class="ti ti-radio"></i> <span id="badge-temas">— temas</span></div>
+          <div class="tanda-badge-sub" id="badge-sub">Radio global</div>
+        </div>
+        <div class="live-badge" id="live-badge">
+          <div class="live-dot" style="background:#555;animation:none;box-shadow:none;"></div>
+          <span>Conectando…</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════ CONTROLES -->
+    <section class="controles-milonga">
+      <div class="controles-wrap">
+        <button id="btn-iniciar" class="btn-control btn-play" onclick="iniciarMilonga()" disabled>
           <i class="ti ti-player-play"></i> Entrar a la radio
         </button>
-        <button id="btn-pausar" class="btn-ctrl" onclick="pausarMilonga()" disabled>
+        <button id="btn-pausar" class="btn-control btn-pause" onclick="pausarMilonga()" disabled>
           <i class="ti ti-player-pause"></i> Pausar
         </button>
-        <button id="btn-stop"   class="btn-ctrl btn-stop" onclick="stopMilonga()" disabled>
-          <i class="ti ti-player-stop"></i>
+        <button id="btn-stop" class="btn-control btn-stop" onclick="stopMilonga()" disabled>
+          <i class="ti ti-player-stop"></i> Stop
         </button>
+        <div id="carga-estado" class="carga-estado" style="display:none"></div>
       </div>
     </section>
 
-    <!-- Volumen -->
-    <section class="card-section">
-      <div class="section-label">VOLUMEN</div>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <canvas id="knob-canvas" width="80" height="80"></canvas>
-        <div style="flex:1">
-          <input type="range" id="vol" min="0" max="100" value="72" class="slider">
-          <div style="display:flex;justify-content:space-between;margin-top:4px;">
-            <span class="slider-label">0</span>
-            <span id="vol-out" class="slider-label">72</span>
-            <span class="slider-label">100</span>
+    <!-- ════════════════════════════════════════ LAYOUT PRINCIPAL -->
+    <div class="layout-grid">
+
+      <!-- ① SONANDO AHORA -->
+      <div class="card card-now area-now">
+        <div class="card-eyebrow">Sonando ahora · Radio global</div>
+        <div class="now-inner">
+          <div class="album-art">
+            <div class="album-placeholder"><i class="ti ti-vinyl"></i></div>
+            <div class="album-spinning-ring"></div>
           </div>
-          <div id="knob-db" style="text-align:center;font-size:11px;color:#c9924a;font-family:Oswald,sans-serif;margin-top:4px;">— dB</div>
+          <div class="now-details">
+            <div class="now-track" id="now-name">El Manijero Radio</div>
+            <div class="now-orq"   id="now-orq">Conectando con la señal…</div>
+            <div class="now-year"  id="now-year">—</div>
+            <div class="chips"     id="now-chips">
+              <span class="chip ch-cortina">Sin datos aún</span>
+            </div>
+            <div class="audio-meta">
+              <span class="meta-item">
+                <span class="meta-label">NIVEL</span>
+                <span class="meta-val" id="meta-lufs">—</span>
+              </span>
+              <span class="meta-sep">·</span>
+              <span class="meta-item">
+                <span class="meta-label">GAIN</span>
+                <span class="meta-val" id="meta-gain">—</span>
+              </span>
+              <span class="meta-item">
+                <span class="meta-label">TRUE PEAK</span>
+                <span class="meta-val" id="meta-tp">—</span>
+              </span>
+              <span class="meta-sep">·</span>
+              <span class="meta-item">
+                <span class="meta-label">DIN R</span>
+                <span class="meta-val" id="meta-rd">—</span>
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Ecualización -->
-    <section class="card-section">
-      <div class="section-label">GRAVES / AGUDOS</div>
-      <div class="slider-row">
-        <span class="slider-label">Graves</span>
-        <input type="range" id="bass" min="0" max="100" value="50" class="slider">
-        <span id="bass-out" class="slider-label">50</span>
-      </div>
-      <div class="slider-row" style="margin-top:10px;">
-        <span class="slider-label">Agudos</span>
-        <input type="range" id="treble" min="0" max="100" value="50" class="slider">
-        <span id="treble-out" class="slider-label">50</span>
-      </div>
-    </section>
-
-    <!-- Métricas de audio -->
-    <section class="card-section">
-      <div class="section-label">AUDIO</div>
-      <div class="metrics-grid">
-        <div class="metric-box">
-          <div id="meta-lufs" class="metric-val">—</div>
-          <div class="metric-lbl">NIVEL</div>
+        <!-- Waveform canvas (placeholder visual) -->
+        <div class="waveform-wrap">
+          <canvas id="waveform-canvas" class="waveform-canvas" height="56"></canvas>
         </div>
-        <div class="metric-box">
-          <div id="meta-gain" class="metric-val">—</div>
-          <div class="metric-lbl">GAIN</div>
+
+        <!-- VU horizontales -->
+        <div class="vu-wrap">
+          <div class="vu-meter">
+            <span class="vu-label">L</span>
+            <div class="vu-bar-wrap">
+              <canvas id="vu-left" class="vu-canvas" width="12" height="80"></canvas>
+            </div>
+          </div>
+          <div class="vu-meter">
+            <span class="vu-label">R</span>
+            <div class="vu-bar-wrap">
+              <canvas id="vu-right" class="vu-canvas" width="12" height="80"></canvas>
+            </div>
+          </div>
+          <div class="vu-scale">
+            <span>0</span><span>-6</span><span>-12</span><span>-18</span><span>-24</span><span>-∞</span>
+          </div>
         </div>
-        <div class="metric-box">
-          <div id="meta-tp" class="metric-val">—</div>
-          <div class="metric-lbl">TRUE PEAK</div>
+
+        <!-- Progreso -->
+        <div class="progress-wrap">
+          <div class="progress-bg">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+          </div>
+          <div class="progress-times">
+            <span id="time-current">0:00</span>
+            <span id="time-total">0:00</span>
+          </div>
         </div>
-        <div class="metric-box">
-          <div id="meta-rd" class="metric-val">—</div>
-          <div class="metric-lbl">DIN R</div>
-        </div>
-      </div>
-      <div class="vu-wrap" style="margin-top:12px;justify-content:center;">
-        <div id="vu-left"  class="vu-bar"></div>
-        <div id="vu-right" class="vu-bar"></div>
-      </div>
-    </section>
 
-  </aside>
-
-  <!-- ── COLUMNA CENTRAL ────────────────────────────────────── -->
-  <section class="col-center">
-
-    <!-- Copiloto IA -->
-    <div class="ia-banner">
-      <i class="ti ti-robot" style="color:#c9924a;font-size:16px;flex-shrink:0;"></i>
-      <span id="ia-texto">Iniciando El Manijero Radio…</span>
-    </div>
-
-    <!-- Datos de tanda -->
-    <div class="tanda-stats">
-      <div class="stat-box">
-        <div id="m-tanda"     class="stat-val">—</div>
-        <div id="m-tanda-sub" class="stat-lbl">Tanda</div>
-      </div>
-      <div class="stat-box">
-        <div id="m-tiempo"    class="stat-val">—</div>
-        <div class="stat-lbl">Restante</div>
-      </div>
-      <div class="stat-box">
-        <div id="m-pista"     class="stat-val">—</div>
-        <div id="m-pista-sub" class="stat-lbl">Pista</div>
-      </div>
-      <div class="stat-box">
-        <div id="m-personas"     class="stat-val">—</div>
-        <div id="m-personas-sub" class="stat-lbl">Cámara</div>
-      </div>
-    </div>
-
-    <!-- Próxima tanda -->
-    <div class="rec-box">
-      <div class="section-label" style="margin-bottom:6px;">PRÓXIMA TANDA</div>
-      <div id="rec-proxima" style="color:rgba(255,255,255,0.5);font-size:13px;font-family:'EB Garamond',serif;">
-        El sistema decide…
-      </div>
-    </div>
-
-    <!-- Cola de reproducción -->
-    <div class="queue-panel">
-      <div class="queue-header">
-        <i class="ti ti-playlist"></i>
-        <span>A CONTINUACIÓN</span>
-        <span id="badge-temas" class="badge-temas" style="margin-left:auto;">—</span>
-      </div>
-      <div id="queue-list" class="queue-list"></div>
-    </div>
-
-    <!-- Historial últimas 6hs -->
-    <div class="historial-panel" style="margin-top:16px;">
-      <div class="historial-header">
-        <i class="ti ti-history"></i> Últimas horas en la radio
-      </div>
-      <div id="historial-lista" class="historial-lista">
-        <div class="historial-item">
-          <span class="historial-num">—</span>
-          <div class="historial-info">
-            <div class="historial-titulo" style="color:rgba(255,255,255,0.2);">Cargando…</div>
+        <div class="now-footer">
+          <div class="ia-inline">
+            <i class="ti ti-cpu"></i>
+            <span id="ia-footer-text">Iniciando El Manijero Radio…</span>
           </div>
         </div>
       </div>
-    </div>
 
-  </section>
-
-  <!-- ── COLUMNA DERECHA ────────────────────────────────────── -->
-  <aside class="col-right">
-
-    <!-- Estado de sesión -->
-    <section class="card-section">
-      <div class="section-label">ESTADO RADIO</div>
-      <div class="metrics-grid">
-        <div class="metric-box">
-          <div id="badge-temas" class="metric-val" style="font-size:16px;">—</div>
-          <div class="metric-lbl">TEMAS</div>
+      <!-- ② TANDA ACTUAL -->
+      <div class="card card-tanda area-tanda">
+        <div class="card-eyebrow">
+          A continuación
+          <span class="tanda-counter" id="tanda-counter" style="display:none">1 / 4</span>
         </div>
-        <div class="metric-box">
-          <div id="badge-sub"   class="metric-val" style="font-size:12px;">—</div>
-          <div class="metric-lbl">ESTADO</div>
+        <div class="queue-list" id="queue-list">
+          <div class="q-item">
+            <div class="q-info">
+              <div class="q-track">Conectando con la radio…</div>
+              <div class="q-orq">los temas aparecerán aquí</div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div id="ia-footer-text" style="margin-top:10px;font-size:11px;color:rgba(255,255,255,0.25);font-family:'Oswald',sans-serif;letter-spacing:1px;">
-        —
-      </div>
-    </section>
 
-    <!-- Chat -->
-    <div class="chat-panel" style="margin-top:16px;">
-      <div class="chat-header">
-        <i class="ti ti-message-circle"></i>
-        Chat de la radio
-      </div>
-
-      <div class="chat-usuario-wrap">
-        <label>Tu nombre</label>
-        <input id="chat-usuario" type="text" placeholder="Oyente" maxlength="24">
-      </div>
-
-      <div id="chat-lista" class="chat-lista">
-        <div class="chat-vacio">Cargando mensajes…</div>
-      </div>
-
-      <div class="chat-input-row">
-        <input
-          id="chat-input"
-          type="text"
-          placeholder="Saludá, pedí un tango…"
-          maxlength="280"
-          onkeydown="if(event.key==='Enter') enviarChat()"
-        >
-        <button class="chat-send-btn" onclick="enviarChat()">
-          <i class="ti ti-send"></i>
-        </button>
-      </div>
-    </div>
-
-    <!-- Canvases ocultos para waveform/evolución (compatibilidad) -->
-    <canvas id="waveform-canvas"  style="display:none;"></canvas>
-    <canvas id="evolucion-canvas" style="display:none;"></canvas>
-
-    <!-- Métricas de pista (sin cámara) -->
-    <section class="card-section" style="margin-top:16px;">
-      <div class="section-label">PISTA</div>
-      <div class="metrics-grid">
-        <div class="metric-box">
-          <div id="g-energia"     class="metric-val">—</div>
-          <div id="g-energia-sub" class="metric-lbl">sin datos</div>
-        </div>
-        <div class="metric-box">
-          <div id="g-densidad"     class="metric-val">—</div>
-          <div id="g-densidad-sub" class="metric-lbl">sin datos</div>
-        </div>
-        <div class="metric-box">
-          <div id="g-fatiga"     class="metric-val">—</div>
-          <div id="g-fatiga-sub" class="metric-lbl">sin datos</div>
-        </div>
-        <div class="metric-box">
-          <div id="g-conexion"     class="metric-val">—</div>
-          <div id="g-conexion-sub" class="metric-lbl">sin datos</div>
+        <!-- Historial últimas horas -->
+        <div style="margin-top:16px;">
+          <div class="card-eyebrow" style="margin-bottom:8px;">
+            <i class="ti ti-history" style="font-size:11px;"></i> Últimas horas
+          </div>
+          <div id="historial-lista" class="historial-lista">
+            <div class="historial-item">
+              <span class="historial-ts">—</span>
+              <div class="historial-info">
+                <div class="historial-titulo" style="color:var(--crema3);">Cargando…</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div style="display:flex;gap:12px;margin-top:10px;">
-        <div class="metric-box" style="flex:1;">
-          <div id="pv-aplausos" class="metric-val">—</div>
-          <div class="metric-lbl">APLAUSOS</div>
+
+      <!-- ④ AUDIO IA -->
+      <div class="card card-audio area-audio">
+        <div class="card-eyebrow">Audio · control</div>
+
+        <div class="knob-wrap">
+          <div class="knob-label">VOLUMEN GENERAL</div>
+          <div class="knob-container">
+            <canvas id="knob-canvas" width="100" height="100"></canvas>
+            <div class="knob-db" id="knob-db">-12.0 dB</div>
+          </div>
         </div>
-        <div class="metric-box" style="flex:1;">
-          <div id="pv-abandono" class="metric-val">—</div>
-          <div class="metric-lbl">ABANDONO</div>
+
+        <div class="vol-rows">
+          <div class="v-row">
+            <span class="v-label">Volumen</span>
+            <input type="range" min="0" max="100" value="72" step="1" id="vol">
+            <span class="v-val" id="vol-out">72</span>
+          </div>
+          <div class="v-row">
+            <span class="v-label">Graves</span>
+            <input type="range" min="0" max="100" value="50" step="1" id="bass">
+            <span class="v-val" id="bass-out">50</span>
+          </div>
+          <div class="v-row">
+            <span class="v-label">Agudos</span>
+            <input type="range" min="0" max="100" value="50" step="1" id="treble">
+            <span class="v-val" id="treble-out">50</span>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <!-- VU verticales reales -->
+        <div class="vu-vertical-wrap">
+          <div class="vu-v-meter">
+            <div class="vu-v-bar">
+              <div class="vu-v-fill" id="vu-vf-left" style="height:0%"></div>
+            </div>
+            <span class="vu-v-label">L</span>
+          </div>
+          <div class="vu-v-meter">
+            <div class="vu-v-bar">
+              <div class="vu-v-fill" id="vu-vf-right" style="height:0%"></div>
+            </div>
+            <span class="vu-v-label">R</span>
+          </div>
+          <div class="vu-v-scale">
+            <span>0</span><span>-6</span><span>-12</span><span>-18</span><span>-24</span><span>-∞</span>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="status-list">
+          <div class="status-row">
+            <span class="status-label">Graves / Agudos</span>
+            <span class="status-on"><i class="ti ti-check"></i> Web Audio API</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Fade cortinas</span>
+            <span class="status-on"><i class="ti ti-check"></i> Activo</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Sincronización</span>
+            <span class="status-on"><i class="ti ti-check"></i> Global</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Modo</span>
+            <span class="status-auto"><i class="ti ti-radio"></i> Radio 24hs</span>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <!-- Chat -->
+        <div class="card-eyebrow" style="margin-bottom:8px;">
+          <i class="ti ti-message-circle" style="font-size:11px;"></i> Chat de la radio
+        </div>
+
+        <div class="chat-panel">
+          <div class="chat-usuario-wrap">
+            <label>Nombre</label>
+            <input id="chat-usuario" type="text" placeholder="Oyente" maxlength="24">
+          </div>
+
+          <div id="chat-lista" class="chat-lista">
+            <div class="chat-vacio">Sé el primero en saludar…</div>
+          </div>
+
+          <div class="chat-input-row">
+            <input
+              id="chat-input"
+              type="text"
+              placeholder="Saludá, pedí un tango…"
+              maxlength="280"
+              onkeydown="if(event.key==='Enter') enviarChat()"
+            >
+            <button class="chat-send-btn" onclick="enviarChat()">
+              <i class="ti ti-send"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ⑤ COPILOTO -->
+      <div class="card card-copiloto area-copiloto">
+        <div class="card-eyebrow">Copiloto El Manijero</div>
+        <div class="copiloto-inner">
+          <img
+            src="https://res.cloudinary.com/dwgwbdtud/image/upload/v1781831795/z8prgersqwl3z0njcjp1.png"
+            alt="El Manijero"
+            class="copiloto-avatar"
+            onerror="this.style.display='none'"
+          />
+          <div class="copiloto-bubble">
+            <div class="ia-text" id="ia-texto">Iniciando la radio. Un momento…</div>
+          </div>
+        </div>
+
+        <div class="copiloto-rec">
+          <div class="rec-label">Próxima tanda</div>
+          <div class="rec-val" id="rec-proxima">El sistema decide…</div>
+        </div>
+
+        <div class="copiloto-ventana">
+          <div class="ventana-label"><i class="ti ti-clock"></i> Sesión</div>
+          <div class="ventana-val" id="ventana-val">RADIO_MASTER</div>
+        </div>
+
+        <div class="ajustes-aplicados">
+          <div class="aj-label">Estado del sistema</div>
+          <div class="aj-chips">
+            <span class="aj-chip" id="aj-gain">IA —</span>
+            <span class="aj-chip" id="aj-eq">SYNC —</span>
+            <span class="aj-chip" id="aj-lufs">CHAT —</span>
+            <span class="aj-chip" id="aj-tp">24HS</span>
+          </div>
         </div>
       </div>
-    </section>
 
-  </aside>
+      <!-- ⑥ LECTURA DE PISTA -->
+      <div class="card card-pista area-pista">
+        <div class="card-eyebrow">Lectura de pista · sin cámara</div>
 
-</main>
+        <div class="gauges-grid">
+          <div class="gauge-item">
+            <div class="gauge-header">🔥 ENERGÍA</div>
+            <canvas id="gauge-energia" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-energia">—</div>
+            <div class="gauge-sub" id="g-energia-sub">sin datos</div>
+          </div>
+          <div class="gauge-item">
+            <div class="gauge-header">👥 DENSIDAD</div>
+            <canvas id="gauge-densidad" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-densidad">—</div>
+            <div class="gauge-sub" id="g-densidad-sub">sin datos</div>
+          </div>
+          <div class="gauge-item">
+            <div class="gauge-header">〰️ FATIGA</div>
+            <canvas id="gauge-fatiga" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-fatiga">—</div>
+            <div class="gauge-sub" id="g-fatiga-sub">sin datos</div>
+          </div>
+          <div class="gauge-item">
+            <div class="gauge-header">❤️ CONEXIÓN</div>
+            <canvas id="gauge-conexion" class="gauge-arc-canvas" width="90" height="60"></canvas>
+            <div class="gauge-val" id="g-conexion">—</div>
+            <div class="gauge-sub" id="g-conexion-sub">sin datos</div>
+          </div>
+        </div>
 
-<!-- ═══════════════════════════════════════════════════════════
-     FOOTER
-════════════════════════════════════════════════════════════ -->
-<footer class="bottom-bar">
-  <span style="opacity:.3;font-size:11px;font-family:'Oswald',sans-serif;letter-spacing:2px;">
-    EL MANIJERO RADIO · TANGO 24HS · GLOBAL
-  </span>
-  <span id="ia-footer-text" style="opacity:.3;font-size:11px;font-family:'Oswald',sans-serif;letter-spacing:1px;">—</span>
-</footer>
+        <div class="pista-meta">
+          <div class="pm-item">
+            <span class="pm-label"><i class="ti ti-users"></i> Personas</span>
+            <span class="pm-val" id="m-personas">—</span>
+            <span class="pm-sub" id="m-personas-sub">SIN CÁMARA</span>
+          </div>
+          <div class="pm-item pm-gold">
+            <span class="pm-label"><i class="ti ti-user-check"></i> En pista</span>
+            <span class="pm-val" id="m-pista">—</span>
+            <span class="pm-sub" id="m-pista-sub">SIN CÁMARA</span>
+          </div>
+          <div class="pm-item">
+            <span class="pm-label"><i class="ti ti-clock"></i> Restante</span>
+            <span class="pm-val" id="m-tiempo">—</span>
+            <span class="pm-sub">tema actual</span>
+          </div>
+        </div>
 
-<script src="panel.js"></script>
+        <div class="evolucion-wrap">
+          <div class="evolucion-label">EVOLUCIÓN DE ENERGÍA</div>
+          <canvas id="evolucion-canvas" class="evolucion-canvas" height="48"></canvas>
+          <div class="evolucion-axis">
+            <span id="evo-t-start">—</span>
+            <span id="evo-t-end">—</span>
+          </div>
+        </div>
 
-<!-- Cargar historial al iniciar -->
-<script>
-  function cargarHistorial() {
-    fetch(GAS_URL + '?action=getHistorial&limite=15')
-      .then(r => r.json())
-      .then(function(data) {
-        const lista = document.getElementById('historial-lista');
-        if (!lista) return;
-        if (!Array.isArray(data) || !data.length) {
-          lista.innerHTML = '<div class="historial-item"><span class="historial-num">—</span><div class="historial-info"><div class="historial-titulo" style="color:rgba(255,255,255,0.2);">Sin historial aún</div></div></div>';
-          return;
-        }
-        lista.innerHTML = data.map(function(t, i) {
-          const ts = t.Timestamp ? new Date(t.Timestamp).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' }) : '';
-          return '<div class="historial-item">' +
-            '<span class="historial-num">' + ts + '</span>' +
-            '<div class="historial-info">' +
-              '<div class="historial-titulo">' + (t.Titulo || '—') + '</div>' +
-              '<div class="historial-orq">' + (t.Orquesta || '') + (t.Genero ? ' · ' + t.Genero : '') + '</div>' +
-            '</div>' +
-            '</div>';
-        }).join('');
-      })
-      .catch(function() {});
-  }
+        <div class="pista-rows">
+          <div class="p-row">
+            <span class="p-label">Aplausos</span>
+            <div class="p-bar"><div class="p-fill fill-a" style="width:0%" id="bar-aplausos"></div></div>
+            <span class="p-val" id="pv-aplausos">—</span>
+          </div>
+          <div class="p-row">
+            <span class="p-label">Abandono</span>
+            <div class="p-bar"><div class="p-fill fill-r" style="width:0%" id="bar-abandono"></div></div>
+            <span class="p-val" id="pv-abandono">—</span>
+          </div>
+        </div>
+      </div>
 
-  // Cargar historial al inicio y cada 2 minutos
-  document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(cargarHistorial, 3000);
-    setInterval(cargarHistorial, 120000);
-  });
-</script>
+    </div><!-- /.layout-grid -->
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <div class="footer-meta">
+        <span class="footer-tema" id="m-tanda-sub">—</span>
+        <span class="sep-dot">·</span>
+        <span class="footer-count" id="m-tanda">0 / 0</span>
+      </div>
+      <div class="cartelito">
+        <div class="cartelito-fallback" id="cartelito-fallback" style="display:flex">
+          <div class="cf-titulo">EL MANIJERO</div>
+          <div class="cf-sub">RADIO · TANGO 24HS</div>
+          <div class="cf-tag">GLOBAL · SINCRONIZADO</div>
+        </div>
+      </div>
+    </footer>
+
+  </div><!-- /#app -->
+
+  <script src="panel.js"></script>
+
+  <script>
+    /* ── Historial: carga al inicio y cada 2 minutos ── */
+    function cargarHistorial() {
+      fetch(GAS_URL + '?action=getHistorial&limite=12')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          const lista = document.getElementById('historial-lista');
+          if (!lista) return;
+          if (!Array.isArray(data) || !data.length) {
+            lista.innerHTML =
+              '<div class="historial-item">' +
+              '<span class="historial-ts">—</span>' +
+              '<div class="historial-info"><div class="historial-titulo" style="color:var(--crema3);">Sin historial aún</div></div>' +
+              '</div>';
+            return;
+          }
+          lista.innerHTML = data.map(function(t) {
+            const ts = t.Timestamp
+              ? new Date(t.Timestamp).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+              : '—';
+            const genero = String(t.Genero || '').toLowerCase();
+            return '<div class="historial-item">' +
+              '<span class="historial-ts">' + ts + '</span>' +
+              '<div class="historial-info">' +
+                '<div class="historial-titulo">' + (t.Titulo || '—') + '</div>' +
+                '<div class="historial-orq">' + (t.Orquesta || '') + (t.Genero ? ' · ' + t.Genero : '') + '</div>' +
+              '</div>' +
+              '<span class="chip ch-' + genero + '" style="flex-shrink:0;font-size:8px;">' + (t.Genero || '') + '</span>' +
+              '</div>';
+          }).join('');
+        })
+        .catch(function() {});
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(cargarHistorial, 4000);
+      setInterval(cargarHistorial, 120000);
+    });
+  </script>
 
 </body>
 </html>
