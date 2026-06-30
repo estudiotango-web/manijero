@@ -25,6 +25,11 @@
           <span class="logo-text">El <span class="logo-accent">Manijero</span></span>
           <span class="logo-sub">RADIO · TANGO 24HS</span>
         </div>
+        <!-- Badge EN VIVO pegado al logo, mismo nivel, visible siempre (mobile y desktop) -->
+        <div class="live-badge live-badge-inline" id="live-badge-inline">
+          <div class="live-dot" style="background:#555;animation:none;box-shadow:none;"></div>
+          <span>Conectando…</span>
+        </div>
       </div>
 
       <div class="topbar-center">
@@ -40,10 +45,6 @@
         <div class="tanda-badge" id="tanda-badge">
           <div class="tanda-badge-num"><i class="ti ti-radio"></i> <span id="badge-temas">— temas</span></div>
           <div class="tanda-badge-sub" id="badge-sub">Radio global</div>
-        </div>
-        <div class="live-badge" id="live-badge">
-          <div class="live-dot" style="background:#555;animation:none;box-shadow:none;"></div>
-          <span>Conectando…</span>
         </div>
       </div>
     </header>
@@ -110,11 +111,45 @@
         </div>
       </div>
 
-      <!-- ② TANDA ACTUAL -->
+      <!-- ② COPILOTO (ahora entre Sonando Ahora y A continuación) -->
+      <div class="card card-copiloto area-copiloto">
+        <div class="card-eyebrow">Copiloto El Manijero</div>
+        <div class="copiloto-inner">
+          <img
+            src="https://res.cloudinary.com/dwgwbdtud/image/upload/v1781831795/z8prgersqwl3z0njcjp1.png"
+            alt="El Manijero"
+            class="copiloto-avatar"
+            onerror="this.style.display='none'"
+          />
+          <div class="copiloto-bubble">
+            <div class="ia-text" id="ia-texto">Iniciando la radio. Un momento…</div>
+          </div>
+        </div>
+
+        <div class="copiloto-rec">
+          <div class="rec-label">Próxima tanda</div>
+          <div class="rec-val" id="rec-proxima">El sistema decide…</div>
+        </div>
+
+        <div class="ajustes-aplicados">
+          <div class="aj-label">Estado del sistema</div>
+          <div class="aj-chips">
+            <span class="aj-chip" id="aj-gain">IA —</span>
+            <span class="aj-chip" id="aj-eq">SYNC —</span>
+            <span class="aj-chip" id="aj-lufs">CHAT —</span>
+            <span class="aj-chip" id="aj-tp">24HS</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ TANDA ACTUAL -->
       <div class="card card-tanda area-tanda">
         <div class="card-eyebrow">
-          A continuación
-          <span class="tanda-counter" id="tanda-counter" style="display:none">1 / 4</span>
+          <span class="eyebrow-left">
+            A continuación
+            <span class="tanda-genero-inline" id="m-tanda-sub">—</span>
+          </span>
+          <span class="tanda-counter" id="m-tanda">0 / 0</span>
         </div>
         <div class="queue-list" id="queue-list">
           <div class="q-item">
@@ -126,7 +161,7 @@
         </div>
 
         <!-- Historial últimas horas -->
-        <div style="margin-top:16px;">
+        <div style="margin-top:14px;">
           <div class="card-eyebrow" style="margin-bottom:8px;">
             <i class="ti ti-history" style="font-size:11px;"></i> Últimas horas
           </div>
@@ -141,33 +176,31 @@
         </div>
       </div>
 
-      <!-- ③ AUDIO + CHAT -->
+      <!-- ④ AUDIO + CHAT -->
       <div class="card card-audio area-audio">
         <div class="card-eyebrow">Audio · control</div>
 
-        <div class="knob-wrap">
-          <div class="knob-label">VOLUMEN GENERAL</div>
-          <div class="knob-container">
-            <canvas id="knob-canvas" width="100" height="100"></canvas>
-            <div class="knob-db" id="knob-db">-12.0 dB</div>
+        <div class="knobs-row">
+          <div class="knob-wrap">
+            <div class="knob-label">VOLUMEN</div>
+            <div class="knob-container">
+              <canvas id="knob-canvas" width="74" height="74"></canvas>
+              <div class="knob-db" id="knob-db">-12.0 dB</div>
+            </div>
           </div>
-        </div>
-
-        <div class="vol-rows">
-          <div class="v-row">
-            <span class="v-label">Volumen</span>
-            <input type="range" min="0" max="100" value="72" step="1" id="vol">
-            <span class="v-val" id="vol-out">72</span>
+          <div class="knob-wrap">
+            <div class="knob-label">GRAVES</div>
+            <div class="knob-container">
+              <canvas id="knob-bass-canvas" width="74" height="74"></canvas>
+              <div class="knob-db" id="bass-db">0.0 dB</div>
+            </div>
           </div>
-          <div class="v-row">
-            <span class="v-label">Graves</span>
-            <input type="range" min="0" max="100" value="50" step="1" id="bass">
-            <span class="v-val" id="bass-out">50</span>
-          </div>
-          <div class="v-row">
-            <span class="v-label">Agudos</span>
-            <input type="range" min="0" max="100" value="50" step="1" id="treble">
-            <span class="v-val" id="treble-out">50</span>
+          <div class="knob-wrap">
+            <div class="knob-label">AGUDOS</div>
+            <div class="knob-container">
+              <canvas id="knob-treble-canvas" width="74" height="74"></canvas>
+              <div class="knob-db" id="treble-db">0.0 dB</div>
+            </div>
           </div>
         </div>
 
@@ -189,27 +222,6 @@
           </div>
           <div class="vu-v-scale">
             <span>0</span><span>-6</span><span>-12</span><span>-18</span><span>-24</span><span>-∞</span>
-          </div>
-        </div>
-
-        <div class="sep"></div>
-
-        <div class="status-list">
-          <div class="status-row">
-            <span class="status-label">Graves / Agudos</span>
-            <span class="status-on"><i class="ti ti-check"></i> Web Audio API</span>
-          </div>
-          <div class="status-row">
-            <span class="status-label">Fade cortinas</span>
-            <span class="status-on"><i class="ti ti-check"></i> Activo</span>
-          </div>
-          <div class="status-row">
-            <span class="status-label">Sincronización</span>
-            <span class="status-on"><i class="ti ti-check"></i> Global</span>
-          </div>
-          <div class="status-row">
-            <span class="status-label">Modo</span>
-            <span class="status-auto"><i class="ti ti-radio"></i> Radio 24hs</span>
           </div>
         </div>
 
@@ -246,51 +258,10 @@
 
       </div>
 
-      <!-- ④ COPILOTO -->
-      <div class="card card-copiloto area-copiloto">
-        <div class="card-eyebrow">Copiloto El Manijero</div>
-        <div class="copiloto-inner">
-          <img
-            src="https://res.cloudinary.com/dwgwbdtud/image/upload/v1781831795/z8prgersqwl3z0njcjp1.png"
-            alt="El Manijero"
-            class="copiloto-avatar"
-            onerror="this.style.display='none'"
-          />
-          <div class="copiloto-bubble">
-            <div class="ia-text" id="ia-texto">Iniciando la radio. Un momento…</div>
-          </div>
-        </div>
-
-        <div class="copiloto-rec">
-          <div class="rec-label">Próxima tanda</div>
-          <div class="rec-val" id="rec-proxima">El sistema decide…</div>
-        </div>
-
-        <div class="copiloto-ventana">
-          <div class="ventana-label"><i class="ti ti-clock"></i> Sesión</div>
-          <div class="ventana-val" id="ventana-val">RADIO_MASTER</div>
-        </div>
-
-        <div class="ajustes-aplicados">
-          <div class="aj-label">Estado del sistema</div>
-          <div class="aj-chips">
-            <span class="aj-chip" id="aj-gain">IA —</span>
-            <span class="aj-chip" id="aj-eq">SYNC —</span>
-            <span class="aj-chip" id="aj-lufs">CHAT —</span>
-            <span class="aj-chip" id="aj-tp">24HS</span>
-          </div>
-        </div>
-      </div>
-
     </div><!-- /.layout-grid -->
 
     <!-- FOOTER -->
     <footer class="app-footer">
-      <div class="footer-meta">
-        <span class="footer-tema" id="m-tanda-sub">—</span>
-        <span class="sep-dot">·</span>
-        <span class="footer-count" id="m-tanda">0 / 0</span>
-      </div>
       <div class="cartelito">
         <div class="cartelito-fallback" id="cartelito-fallback" style="display:flex">
           <div class="cf-titulo">EL MANIJERO</div>
