@@ -1,47 +1,45 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   El Manijero Radio · panel.js v2.1
+   El Manijero Radio · panel.js v3.0
    Radio global sincronizada.
-   El frontend hace 6 cosas:
+   El frontend hace 5 cosas:
    1. Entrar sincronizado (offset = ahora - InicioTema)
    2. Reproducir audio con Web Audio API (EQ real)
-   3. Reportar al backend qué está sonando + duracionSeg real
-   4. Al terminar cortina → backend genera siguiente tanda
-   5. Polling cada 30s para nuevos temas
-   6. Chat en tiempo real
+   3. Avisar al backend "este tema terminó" (el backend decide qué sigue)
+   4. Polling cada 30s para nuevos temas
+   5. Chat en tiempo real
+   IMPORTANTE: ningún cliente decide por sí mismo cuándo avanza la radio.
+   Esa decisión es 100% del backend (avanzarTema en Radio.gs, con lock).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const GAS_URL              = 'https://script.google.com/macros/s/AKfycbyRl3bE68wo-rRyJXCsdZ-DIG7JtDxGPMtz8Gz9fXzN4SEDpyFZHZl44kzSFa6eXo1j/exec';
-const CORTINA_DURACION_SEG = 45;
-const POLLING_MS           = 30000;
-const CHAT_POLLING_MS      = 8000;
+const GAS_URL         = 'https://script.google.com/macros/s/AKfycbyRl3bE68wo-rRyJXCsdZ-DIG7JtDxGPMtz8Gz9fXzN4SEDpyFZHZl44kzSFa6eXo1j/exec';
+const POLLING_MS      = 30000;
+const CHAT_POLLING_MS = 8000;
 
 // ── Estado ─────────────────────────────────────────────────────────────────
-let biblioteca     = [];
-let indexActual    = 0;
-let estadoPanel    = 'idle';
-let audioGenId     = 0;
+let biblioteca   = [];
+let indexActual  = 0;
+let estadoPanel  = 'idle';
+let audioGenId   = 0;
 
 // ── Web Audio API ──────────────────────────────────────────────────────────
-let audioCtx       = null;
-let sourceNode     = null;
-let bassFilter     = null;
-let trebleFilter   = null;
-let gainNode       = null;
-let analyserNode   = null;
-let audioEl        = null;
+let audioCtx     = null;
+let sourceNode   = null;
+let bassFilter   = null;
+let trebleFilter = null;
+let gainNode     = null;
+let analyserNode = null;
+let audioEl      = null;
 
 // ── Knob ───────────────────────────────────────────────────────────────────
-let knobValue      = 72;
-let knobDragging   = false;
-let knobStartY     = 0;
-let knobStartVal   = 72;
+let knobValue    = 72;
+let knobDragging = false;
+let knobStartY   = 0;
+let knobStartVal = 72;
 
 // ── Timers ─────────────────────────────────────────────────────────────────
-let cortinaTimer   = null;
-let pollingTimer   = null;
-let chatTimer      = null;
-let vuTimer        = null;
-let ultimoIDReportado = null;
+let pollingTimer = null;
+let chatTimer    = null;
+let vuTimer      = null;
 
 // ══════════════════════════════════════════════════════════════════════════
 // ARRANQUE
@@ -54,24 +52,19 @@ document.addEventListener('DOMContentLoaded', function () {
   initKnob();
   actualizarBotones();
   sincronizarEntrada();
-  window.addEventListener('resize', handleResize);
-  setTimeout(handleResize, 100);
 });
 
 // ══════════════════════════════════════════════════════════════════════════
 // SINCRONIZACIÓN DE ENTRADA
-// Nuevo cliente → pregunta al backend qué está sonando y entra en sync
 // ══════════════════════════════════════════════════════════════════════════
 
 async function sincronizarEntrada() {
   mostrarEstadoCarga('Conectando con la radio…');
 
   try {
-    // 1. Estado de la radio (qué está sonando ahora)
     const resEstado = await fetch(GAS_URL + '?action=getEstadoRadio');
     const estado    = await resEstado.json();
 
-    // 2. Biblioteca completa
     const resBib = await fetch(GAS_URL + '?action=getBiblioteca');
     const bib    = await resBib.json();
 
@@ -86,7 +79,6 @@ async function sincronizarEntrada() {
     iniciarPolling();
     iniciarChatPolling();
 
-    // Si la radio está activa y hay tema sonando, entrar en sync
     if (estado.ok && estado.AudioURL && estado.OffsetSeg >= 0) {
       const idx = biblioteca.findIndex(t => t.ID === estado.ID);
       indexActual = idx >= 0 ? idx : 0;
@@ -107,30 +99,29 @@ async function sincronizarEntrada() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// WEB AUDIO API — inicializar contexto y cadena de efectos
+// WEB AUDIO API
 // ══════════════════════════════════════════════════════════════════════════
 
 function initAudioContext() {
   if (audioCtx) return;
-  audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
-  gainNode     = audioCtx.createGain();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  gainNode = audioCtx.createGain();
   gainNode.gain.value = knobValue / 100;
 
-  bassFilter           = audioCtx.createBiquadFilter();
-  bassFilter.type      = 'lowshelf';
+  bassFilter = audioCtx.createBiquadFilter();
+  bassFilter.type = 'lowshelf';
   bassFilter.frequency.value = 200;
-  bassFilter.gain.value      = 0;
+  bassFilter.gain.value = 0;
 
-  trebleFilter           = audioCtx.createBiquadFilter();
-  trebleFilter.type      = 'highshelf';
+  trebleFilter = audioCtx.createBiquadFilter();
+  trebleFilter.type = 'highshelf';
   trebleFilter.frequency.value = 4000;
-  trebleFilter.gain.value      = 0;
+  trebleFilter.gain.value = 0;
 
-  analyserNode             = audioCtx.createAnalyser();
-  analyserNode.fftSize     = 256;
+  analyserNode = audioCtx.createAnalyser();
+  analyserNode.fftSize = 256;
   analyserNode.smoothingTimeConstant = 0.8;
 
-  // Cadena: source → bass → treble → gain → analyser → destino
   bassFilter.connect(trebleFilter);
   trebleFilter.connect(gainNode);
   gainNode.connect(analyserNode);
@@ -147,7 +138,7 @@ function conectarAudioEl(el) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// VU METER REAL (desde analyser)
+// VU METER REAL (desde analyser) — solo el VU vertical, real
 // ══════════════════════════════════════════════════════════════════════════
 
 function iniciarVU() {
@@ -160,22 +151,21 @@ function iniciarVU() {
     const db  = avg > 0 ? (20 * Math.log10(avg / 255)).toFixed(1) : '-∞';
     setEl('meta-lufs', db + ' dB');
 
-    // Barras de VU si existen en el HTML
-    const bL = document.getElementById('vu-left');
-    const bR = document.getElementById('vu-right');
     const pct = Math.min((avg / 255) * 100, 100).toFixed(1);
-    if (bL) bL.style.height = pct + '%';
-    if (bR) bR.style.height = (pct * (0.9 + Math.random() * 0.2)).toFixed(1) + '%';
+    const vL = document.getElementById('vu-vf-left');
+    const vR = document.getElementById('vu-vf-right');
+    if (vL) vL.style.height = pct + '%';
+    if (vR) vR.style.height = (pct * (0.9 + Math.random() * 0.2)).toFixed(1) + '%';
   }, 80);
 }
 
 function detenerVU() {
   if (vuTimer) { clearInterval(vuTimer); vuTimer = null; }
   setEl('meta-lufs', '—');
-  const bL = document.getElementById('vu-left');
-  const bR = document.getElementById('vu-right');
-  if (bL) bL.style.height = '0%';
-  if (bR) bR.style.height = '0%';
+  const vL = document.getElementById('vu-vf-left');
+  const vR = document.getElementById('vu-vf-right');
+  if (vL) vL.style.height = '0%';
+  if (vR) vR.style.height = '0%';
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -187,7 +177,6 @@ function iniciarMilonga() {
   if (estadoPanel === 'paused') { reanudar(); return; }
   if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   estadoPanel = 'playing';
-  indexActual = 0;
   actualizarBotones();
   actualizarLiveBadge();
   reproducirTema(indexActual);
@@ -198,7 +187,6 @@ function pausarMilonga() {
   estadoPanel = 'paused';
   if (audioEl && !audioEl.paused) audioEl.pause();
   if (audioCtx) audioCtx.suspend();
-  detenerTimers();
   detenerVU();
   activarRing(false);
   actualizarBotones();
@@ -219,7 +207,6 @@ function reanudar() {
 function stopMilonga() {
   estadoPanel = 'stopped';
   detenerAudio();
-  detenerTimers();
   detenerVU();
   activarRing(false);
   actualizarBotones();
@@ -238,42 +225,56 @@ function stopMilonga() {
 function reproducirTema(index) {
   if (index >= biblioteca.length) { esperarNuevosTemas(); return; }
   const tema = biblioteca[index];
-  detenerTimers();
   detenerAudio();
   renderTemaActual(tema, index);
   renderCola(biblioteca.slice(index + 1, index + 6));
   actualizarContadorTemas();
-  reportarAlBackend(tema, 0);
 
-  if (esCortina(tema)) { reproducirCortina(tema); return; }
-  if (tema.AudioURL)   { reproducirAudio(tema, 0); return; }
+  if (tema.AudioURL) { reproducirAudio(tema, 0); return; }
 
-  console.warn('Sin AudioURL — saltando:', tema.Titulo);
-  setTimeout(avanzarTema, 800);
+  console.warn('Sin AudioURL — avisando avance:', tema.Titulo);
+  solicitarAvance(tema.ID);
 }
 
 function reproducirDesdeOffset(tema, offsetSeg) {
-  detenerTimers();
   detenerAudio();
   renderTemaActual(tema, indexActual);
   renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
 
-  if (esCortina(tema)) {
-    reproducirCortina(tema, offsetSeg);
-    return;
-  }
-  if (tema.AudioURL) {
-    reproducirAudio(tema, offsetSeg);
-    return;
-  }
-  avanzarTema();
+  if (tema.AudioURL) { reproducirAudio(tema, offsetSeg); return; }
+  solicitarAvance(tema.ID);
 }
 
-function avanzarTema() {
-  if (estadoPanel === 'stopped' || estadoPanel === 'idle') return;
-  indexActual++;
-  if (indexActual >= biblioteca.length) { esperarNuevosTemas(); return; }
-  reproducirTema(indexActual);
+/* ──────────────────────────────────────────────────────────────────────────
+   ÚNICO punto donde un cliente le habla al backend sobre avanzar.
+   El backend decide si efectivamente avanza (lock + chequeo de ID) y
+   devuelve el estado real, al que este cliente simplemente se ajusta.
+   ────────────────────────────────────────────────────────────────────────── */
+function solicitarAvance(idFinalizado) {
+  fetch(GAS_URL + '?action=avanzarTema&ID=' + encodeURIComponent(idFinalizado))
+    .then(r => r.json())
+    .then(function (data) {
+      if (estadoPanel === 'stopped' || estadoPanel === 'idle') return;
+      if (!data.ok || !data.estadoActual || !data.estadoActual.ok) {
+        refrescarBiblioteca().then(function () { setTimeout(function(){ reproducirTema(indexActual); }, 1500); });
+        return;
+      }
+      const est = data.estadoActual;
+      let idx = biblioteca.findIndex(t => t.ID === est.ID);
+      if (idx === -1) {
+        refrescarBiblioteca().then(function () {
+          idx = biblioteca.findIndex(t => t.ID === est.ID);
+          indexActual = idx >= 0 ? idx : indexActual;
+          reproducirTema(indexActual);
+        });
+        return;
+      }
+      indexActual = idx;
+      reproducirTema(indexActual);
+    })
+    .catch(function () {
+      setTimeout(function () { solicitarAvance(idFinalizado); }, 2000);
+    });
 }
 
 function esperarNuevosTemas() {
@@ -297,13 +298,9 @@ function reproducirAudio(tema, offsetSeg) {
   el.preload     = 'auto';
   audioEl        = el;
 
-  // Duración: escuchar durationchange además de loadedmetadata
   function actualizarDuracion() {
     if (audioGenId !== miGenId || !el.duration || isNaN(el.duration)) return;
-    const tot = Math.floor(el.duration);
-    setEl('time-total', fmt(tot));
-    // Reportar duracion real al backend
-    reportarAlBackend(tema, tot);
+    setEl('time-total', fmt(Math.floor(el.duration)));
   }
   el.addEventListener('loadedmetadata', actualizarDuracion);
   el.addEventListener('durationchange',  actualizarDuracion);
@@ -321,7 +318,7 @@ function reproducirAudio(tema, offsetSeg) {
     el.play().catch(function (err) {
       if (audioGenId !== miGenId) return;
       console.warn('Error reproduciendo:', err);
-      avanzarTema();
+      solicitarAvance(tema.ID);
     });
 
     resetProgressUI();
@@ -332,117 +329,22 @@ function reproducirAudio(tema, offsetSeg) {
   el.addEventListener('ended', function () {
     if (audioGenId !== miGenId) return;
     detenerVU();
-    avanzarTema();
+    solicitarAvance(tema.ID);
   });
 
   el.addEventListener('error', function () {
     if (audioGenId !== miGenId) return;
-    console.warn('Error de audio — saltando:', tema.Titulo);
+    console.warn('Error de audio — avisando avance:', tema.Titulo);
     detenerVU();
-    avanzarTema();
+    solicitarAvance(tema.ID);
   });
 
   el.addEventListener('timeupdate', function () {
     if (audioGenId !== miGenId || !el.duration) return;
-    const pct  = (el.currentTime / el.duration) * 100;
-    const pf   = document.getElementById('progress-fill');
+    const pct = (el.currentTime / el.duration) * 100;
+    const pf  = document.getElementById('progress-fill');
     if (pf) pf.style.width = pct.toFixed(1) + '%';
     setEl('time-current', fmt(el.currentTime));
-    setEl('m-tiempo',     fmt(el.duration - el.currentTime));
-  });
-}
-
-function reproducirCortina(tema, offsetSeg) {
-  const FADE_IN  = 2000;
-  const FADE_OUT = 4000;
-  const STEP     = 50;
-  const miGenId  = ++audioGenId;
-  const durSeg   = CORTINA_DURACION_SEG;
-  const inicio   = offsetSeg || 0;
-
-  if (!tema.AudioURL) {
-    activarRing(true);
-    let seg = inicio;
-    const tick = setInterval(function () {
-      if (audioGenId !== miGenId) { clearInterval(tick); return; }
-      seg++;
-      const pct = Math.min((seg / durSeg) * 100, 100);
-      const pf  = document.getElementById('progress-fill');
-      if (pf) pf.style.width = pct.toFixed(1) + '%';
-      setEl('time-current', fmt(seg));
-      setEl('m-tiempo',     fmt(durSeg - seg));
-      if (seg >= durSeg) { clearInterval(tick); if (audioGenId === miGenId) avanzarTema(); }
-    }, 1000);
-    cortinaTimer = tick;
-    return;
-  }
-
-  const el       = new Audio();
-  el.crossOrigin = 'anonymous';
-  el.src         = tema.AudioURL;
-  el.volume      = 0;
-  el.preload     = 'auto';
-  audioEl        = el;
-
-  el.addEventListener('canplaythrough', function onReady() {
-    el.removeEventListener('canplaythrough', onReady);
-    if (audioGenId !== miGenId) return;
-
-    try { conectarAudioEl(el); } catch(e) {}
-
-    if (inicio > 0 && el.duration && inicio < el.duration) el.currentTime = inicio;
-
-    el.play().catch(function () { if (audioGenId === miGenId) avanzarTema(); });
-
-    resetProgressUI();
-    setEl('time-total', fmt(durSeg));
-    activarRing(true);
-
-    let seg = inicio;
-    const tick = setInterval(function () {
-      if (audioGenId !== miGenId) { clearInterval(tick); return; }
-      seg++;
-      const pct = Math.min((seg / durSeg) * 100, 100);
-      const pf  = document.getElementById('progress-fill');
-      if (pf) pf.style.width = pct.toFixed(1) + '%';
-      setEl('time-current', fmt(seg));
-      setEl('m-tiempo',     fmt(durSeg - seg));
-      if (seg >= durSeg) clearInterval(tick);
-    }, 1000);
-    cortinaTimer = tick;
-
-    const targetVol = knobValue / 100;
-    const stepsIn   = FADE_IN / STEP;
-    const stepIn    = targetVol / stepsIn;
-    const fi = setInterval(function () {
-      if (audioGenId !== miGenId) { clearInterval(fi); return; }
-      el.volume = Math.min(el.volume + stepIn, targetVol);
-      if (gainNode) gainNode.gain.value = el.volume;
-      if (el.volume >= targetVol) clearInterval(fi);
-    }, STEP);
-
-    const restante = (durSeg - inicio) * 1000;
-    setTimeout(function () {
-      if (audioGenId !== miGenId) return;
-      const stepsOut = FADE_OUT / STEP;
-      const stepOut  = el.volume / stepsOut;
-      const fo = setInterval(function () {
-        if (audioGenId !== miGenId) { clearInterval(fo); return; }
-        el.volume = Math.max(el.volume - stepOut, 0);
-        if (gainNode) gainNode.gain.value = el.volume;
-        if (el.volume <= 0) {
-          clearInterval(fo);
-          detenerVU();
-          if (audioGenId === miGenId) avanzarTema();
-        }
-      }, STEP);
-    }, Math.max(restante - FADE_OUT, 0));
-
-  }, { once: true });
-
-  el.addEventListener('error', function () {
-    if (audioGenId !== miGenId) return;
-    avanzarTema();
   });
 }
 
@@ -450,57 +352,13 @@ function detenerAudio() {
   if (audioEl) {
     audioEl.pause();
     audioEl.src = '';
-    audioEl     = null;
+    audioEl = null;
   }
   if (sourceNode) {
     try { sourceNode.disconnect(); } catch(e) {}
     sourceNode = null;
   }
   audioGenId++;
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// REPORTAR AL BACKEND
-// ══════════════════════════════════════════════════════════════════════════
-
-function reportarAlBackend(tema, duracionSeg) {
-  if (!tema || !tema.ID) return;
-
-  // Solo reportar una vez por tema salvo que cambie la duración real
-  if (tema.ID === ultimoIDReportado && duracionSeg === 0) return;
-  ultimoIDReportado = tema.ID;
-
-  const params = new URLSearchParams({
-    action:          'reportarReproduccion',
-    ID:              tema.ID,
-    Titulo:          tema.Titulo     || '',
-    Orquesta:        tema.Orquesta   || '',
-    Genero:          tema.Genero     || '',
-    Estilo:          tema.Estilo     || '',
-    Anio:            tema.Anio       || '',
-    AudioURL:        tema.AudioURL   || '',
-    esCortina:       esCortina(tema) ? '1' : '0',
-    duracionSeg:     duracionSeg || 0,
-    indexActual:     indexActual,
-    totalBiblioteca: biblioteca.length,
-  });
-
-  fetch(GAS_URL + '?' + params.toString())
-    .then(r => r.json())
-    .then(function (data) {
-      if (!data.ok) return;
-
-      if (data.accion === 'tandaGenerada' && data.temasAgregados > 0) {
-        setTimeout(refrescarBiblioteca, 2000);
-      }
-
-      if (data.mensajeIA) setEl('ia-texto', data.mensajeIA);
-      if (data.proximaTanda) setEl('rec-proxima', 'Próxima tanda: ' + data.proximaTanda);
-
-      // Mostrar frase de introducción si hay pedido activo
-      if (data.frase) mostrarFrase(data.frase);
-    })
-    .catch(function (e) { console.warn('Error reportando:', e.message); });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -521,13 +379,15 @@ function enviarChat() {
 
   fetch(GAS_URL, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // text/plain evita el preflight CORS que Apps Script no responde:
+    // si se manda como application/json, el navegador hace OPTIONS antes
+    // y la petición se cae silenciosamente en varios navegadores.
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body:    JSON.stringify({ action: 'enviarChat', usuario: user, mensaje: msg }),
   })
     .then(r => r.json())
-    .then(function (data) {
+    .then(function () {
       input.disabled = false;
-      if (data.frase) mostrarFrase(data.frase);
       cargarChat();
     })
     .catch(function () { input.disabled = false; });
@@ -558,9 +418,9 @@ function renderChat(mensajes) {
     const badge = tipo === 'PEDIDO'      ? '<span class="chat-badge pedido">pedido</span>'
                 : tipo === 'DEDICATORIA' ? '<span class="chat-badge dedic">dedicatoria</span>'
                 : '';
-    const texto = m.MensajeTraducido || m.MensajeOriginal || '';
+    const texto = escapeHtml(m.MensajeTraducido || m.MensajeOriginal || '');
     return '<div class="chat-item">' +
-      '<span class="chat-user">' + (m.Usuario || 'anon') + '</span>' +
+      '<span class="chat-user">' + escapeHtml(m.Usuario || 'anon') + '</span>' +
       '<span class="chat-ts">'   + ts + '</span>' +
       badge +
       '<div class="chat-msg">'   + texto + '</div>' +
@@ -570,16 +430,16 @@ function renderChat(mensajes) {
   lista.scrollTop = lista.scrollHeight;
 }
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function iniciarChatPolling() {
   if (chatTimer) return;
   cargarChat();
   chatTimer = setInterval(cargarChat, CHAT_POLLING_MS);
-}
-
-function mostrarFrase(frase) {
-  if (!frase) return;
-  setEl('ia-texto', frase);
-  mostrarToast(frase);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -647,17 +507,8 @@ function renderTemaActual(tema, index) {
   setEl('ia-footer-text', 'Tema ' + (index + 1) + ' de ' + biblioteca.length);
   setEl('badge-temas',    (index + 1) + ' / ' + biblioteca.length);
   setEl('badge-sub',      esCortina(tema) ? 'Cortina' : ('Tanda · ' + (tema.Genero || '')));
-  setEl('time-total',     esCortina(tema) ? fmt(CORTINA_DURACION_SEG) : (tema.Duracion || '—'));
 
-  // Métricas — solo reales
   setEl('meta-lufs', '—');
-  setEl('meta-gain', '—');
-  setEl('meta-tp',   '—');
-  setEl('meta-rd',   '—');
-  setEl('m-pista',        '—');
-  setEl('m-personas',     '—');
-  setEl('m-pista-sub',    'SIN CÁMARA');
-  setEl('m-personas-sub', 'SIN CÁMARA');
 
   let html = '<span class="chip ch-' + (tema.Genero || '').toLowerCase() + '">' + (tema.Genero || '?') + '</span>';
   if (tema.Estilo && !esCortina(tema)) html += '<span class="chip ch-gold">' + tema.Estilo + '</span>';
@@ -668,7 +519,7 @@ function renderTemaActual(tema, index) {
   if (chips) chips.innerHTML = html;
 
   setEl('ia-texto', esCortina(tema)
-    ? 'Cortina · ' + CORTINA_DURACION_SEG + 's · próxima tanda en camino.'
+    ? 'Cortina · próxima tanda en camino.'
     : 'Reproduciendo en la radio global.');
 }
 
@@ -712,7 +563,7 @@ function renderCola(temas) {
       (esNext ? '<i class="ti ti-arrow-right q-arrow"></i>' : '<span class="q-num">' + num + '</span>') +
       '<div class="q-info">' +
         '<div class="q-track">' + (t.Titulo || '—') + ' · ' + (t.Orquesta || '—') + '</div>' +
-        '<div class="q-orq">'  + (esCortina(t) ? fmt(CORTINA_DURACION_SEG) : (t.Duracion || '—')) + ' · ' + (t.Estilo || '') + '</div>' +
+        '<div class="q-orq">'  + (t.Duracion || '') + ' · ' + (t.Estilo || '') + '</div>' +
       '</div>' +
       '<span class="chip ch-' + (t.Genero || '').toLowerCase() + '">' + (t.Genero || '') + '</span>' +
       '</div>';
@@ -843,11 +694,6 @@ function resetProgressUI() {
   if (pf) pf.style.width = '0%';
   setEl('time-current', '0:00');
   setEl('time-total',   '0:00');
-  setEl('m-tiempo',     '—');
-}
-
-function detenerTimers() {
-  if (cortinaTimer) { clearInterval(cortinaTimer); cortinaTimer = null; }
 }
 
 function mostrarEstadoCarga(msg) {
@@ -915,11 +761,4 @@ function initSliders() {
   }
 }
 
-function handleResize() {
-  const wf = document.getElementById('waveform-canvas');
-  const ev = document.getElementById('evolucion-canvas');
-  if (wf) wf.width = wf.offsetWidth || 400;
-  if (ev) ev.width = ev.offsetWidth  || 300;
-}
-
-console.log('El Manijero Radio v2.1 · listo');
+console.log('El Manijero Radio v3.0 · listo');
