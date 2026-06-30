@@ -20,6 +20,7 @@ let biblioteca   = [];
 let indexActual  = 0;
 let estadoPanel  = 'idle';
 let audioGenId   = 0;
+let pendingOffsetSeg = 0;
 
 // ── Web Audio API ──────────────────────────────────────────────────────────
 let audioCtx     = null;
@@ -75,29 +76,29 @@ async function sincronizarEntrada() {
 
     biblioteca = bib;
     mostrarEstadoCarga(null);
-    actualizarBotones();
     iniciarPolling();
     iniciarChatPolling();
 
     if (estado.ok && estado.AudioURL && estado.OffsetSeg >= 0) {
       const idx = biblioteca.findIndex(t => t.ID === estado.ID);
       indexActual = idx >= 0 ? idx : 0;
-      estadoPanel = 'playing';
-      actualizarBotones();
-      actualizarLiveBadge();
+      // NO reproducir acá. Solo mostrar el estado y dejar listo el offset
+      // para que arranque recién con el click del usuario (gesto requerido
+      // por autoplay policy en mobile).
+      pendingOffsetSeg = estado.OffsetSeg;
       renderTemaActual(biblioteca[indexActual], indexActual);
       renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
-      reproducirDesdeOffset(biblioteca[indexActual], estado.OffsetSeg);
+      estadoPanel = 'idle'; // sigue "idle" hasta que el usuario haga click
     } else {
       renderBibliotecaCargada();
     }
+    actualizarBotones();
 
   } catch (e) {
     console.warn('Error sincronizando:', e);
     mostrarEstadoCarga('Error al conectar. Verificá la URL del GAS.');
   }
 }
-
 // ══════════════════════════════════════════════════════════════════════════
 // WEB AUDIO API
 // ══════════════════════════════════════════════════════════════════════════
@@ -179,7 +180,14 @@ function iniciarMilonga() {
   estadoPanel = 'playing';
   actualizarBotones();
   actualizarLiveBadge();
-  reproducirTema(indexActual);
+
+  if (pendingOffsetSeg > 0) {
+    const offset = pendingOffsetSeg;
+    pendingOffsetSeg = 0;
+    reproducirDesdeOffset(biblioteca[indexActual], offset);
+  } else {
+    reproducirTema(indexActual);
+  }
 }
 
 function pausarMilonga() {
