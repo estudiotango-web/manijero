@@ -8,191 +8,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600&family=Oswald:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
   <link rel="stylesheet" href="panel.css">
-  <style>
-    /* ── Chat ─────────────────────────────────────────────────────────── */
-    .chat-panel {
-      display: flex;
-      flex-direction: column;
-      height: 380px;
-      overflow: hidden;
-    }
-    .chat-usuario-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    .chat-usuario-wrap label {
-      font-family: 'Oswald', sans-serif;
-      font-size: 9px;
-      letter-spacing: 2px;
-      color: var(--crema3);
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
-    .chat-usuario-wrap input {
-      background: transparent;
-      border: none;
-      border-bottom: 0.5px solid var(--oro-border);
-      color: var(--oro-claro);
-      font-family: 'Oswald', sans-serif;
-      font-size: 12px;
-      letter-spacing: 1px;
-      outline: none;
-      width: 110px;
-      padding: 2px 4px;
-    }
-    .chat-lista {
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding-right: 4px;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(201,146,74,0.15) transparent;
-    }
-    .chat-item {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 5px;
-    }
-    .chat-user {
-      font-family: 'Oswald', sans-serif;
-      font-size: 10px;
-      color: var(--oro);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
-    .chat-ts {
-      font-size: 9px;
-      color: var(--crema3);
-      flex-shrink: 0;
-    }
-    .chat-badge {
-      font-family: 'Oswald', sans-serif;
-      font-size: 8px;
-      letter-spacing: 1px;
-      padding: 1px 5px;
-      border-radius: 2px;
-      text-transform: uppercase;
-      flex-shrink: 0;
-    }
-    .chat-badge.pedido  {
-      background: var(--oro-dim);
-      color: var(--oro-claro);
-      border: 0.5px solid var(--oro-border);
-    }
-    .chat-badge.dedic   {
-      background: var(--rojo-dim);
-      color: #E87070;
-      border: 0.5px solid var(--rojo-border);
-    }
-    .chat-msg {
-      width: 100%;
-      color: var(--crema2);
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      line-height: 1.45;
-      font-style: italic;
-    }
-    .chat-vacio {
-      color: var(--crema3);
-      font-size: 12px;
-      text-align: center;
-      padding: 20px 0;
-      font-family: 'Playfair Display', serif;
-      font-style: italic;
-    }
-    .chat-input-row {
-      display: flex;
-      gap: 6px;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 0.5px solid var(--border-soft);
-    }
-    .chat-input-row input[type="text"] {
-      flex: 1;
-      background: rgba(255,255,255,0.03);
-      border: 0.5px solid var(--border);
-      border-radius: 4px;
-      color: var(--crema);
-      font-family: 'Inter', sans-serif;
-      font-size: 12px;
-      padding: 6px 10px;
-      outline: none;
-      transition: border-color .2s;
-      min-width: 0;
-    }
-    .chat-input-row input[type="text"]:focus {
-      border-color: var(--oro-border);
-    }
-    .chat-input-row input[type="text"]::placeholder {
-      color: var(--crema3);
-      font-style: italic;
-    }
-    .chat-send-btn {
-      background: var(--rojo-dim);
-      border: 0.5px solid var(--rojo-border);
-      color: #E87070;
-      border-radius: 4px;
-      padding: 6px 12px;
-      font-family: 'Oswald', sans-serif;
-      font-size: 11px;
-      letter-spacing: 1px;
-      cursor: pointer;
-      transition: background .15s;
-      flex-shrink: 0;
-    }
-    .chat-send-btn:hover { background: rgba(139,26,26,0.3); }
-
-    /* ── Historial ────────────────────────────────────────────────────── */
-    .historial-lista {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      max-height: 200px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(201,146,74,0.15) transparent;
-    }
-    .historial-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0;
-      border-bottom: 0.5px solid var(--border-soft);
-    }
-    .historial-item:last-child { border-bottom: none; }
-    .historial-ts {
-      font-family: 'Oswald', sans-serif;
-      font-size: 9px;
-      color: var(--crema3);
-      width: 36px;
-      flex-shrink: 0;
-      text-align: right;
-    }
-    .historial-info { flex: 1; min-width: 0; }
-    .historial-titulo {
-      font-size: 11px;
-      color: var(--crema);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .historial-orq {
-      font-size: 10px;
-      color: var(--crema3);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* ── VU real (barras verticales reales desde analyser) ────────────── */
-    #vu-vf-left, #vu-vf-right { transition: height 0.08s linear; }
-  </style>
 </head>
 <body>
 
@@ -272,45 +87,7 @@
                 <span class="meta-label">NIVEL</span>
                 <span class="meta-val" id="meta-lufs">—</span>
               </span>
-              <span class="meta-sep">·</span>
-              <span class="meta-item">
-                <span class="meta-label">GAIN</span>
-                <span class="meta-val" id="meta-gain">—</span>
-              </span>
-              <span class="meta-item">
-                <span class="meta-label">TRUE PEAK</span>
-                <span class="meta-val" id="meta-tp">—</span>
-              </span>
-              <span class="meta-sep">·</span>
-              <span class="meta-item">
-                <span class="meta-label">DIN R</span>
-                <span class="meta-val" id="meta-rd">—</span>
-              </span>
             </div>
-          </div>
-        </div>
-
-        <!-- Waveform canvas (placeholder visual) -->
-        <div class="waveform-wrap">
-          <canvas id="waveform-canvas" class="waveform-canvas" height="56"></canvas>
-        </div>
-
-        <!-- VU horizontales -->
-        <div class="vu-wrap">
-          <div class="vu-meter">
-            <span class="vu-label">L</span>
-            <div class="vu-bar-wrap">
-              <canvas id="vu-left" class="vu-canvas" width="12" height="80"></canvas>
-            </div>
-          </div>
-          <div class="vu-meter">
-            <span class="vu-label">R</span>
-            <div class="vu-bar-wrap">
-              <canvas id="vu-right" class="vu-canvas" width="12" height="80"></canvas>
-            </div>
-          </div>
-          <div class="vu-scale">
-            <span>0</span><span>-6</span><span>-12</span><span>-18</span><span>-24</span><span>-∞</span>
           </div>
         </div>
 
@@ -364,7 +141,7 @@
         </div>
       </div>
 
-      <!-- ④ AUDIO IA -->
+      <!-- ③ AUDIO + CHAT -->
       <div class="card card-audio area-audio">
         <div class="card-eyebrow">Audio · control</div>
 
@@ -469,7 +246,7 @@
 
       </div>
 
-      <!-- ⑤ COPILOTO -->
+      <!-- ④ COPILOTO -->
       <div class="card card-copiloto area-copiloto">
         <div class="card-eyebrow">Copiloto El Manijero</div>
         <div class="copiloto-inner">
@@ -501,78 +278,6 @@
             <span class="aj-chip" id="aj-eq">SYNC —</span>
             <span class="aj-chip" id="aj-lufs">CHAT —</span>
             <span class="aj-chip" id="aj-tp">24HS</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ⑥ LECTURA DE PISTA -->
-      <div class="card card-pista area-pista">
-        <div class="card-eyebrow">Lectura de pista · sin cámara</div>
-
-        <div class="gauges-grid">
-          <div class="gauge-item">
-            <div class="gauge-header">🔥 ENERGÍA</div>
-            <canvas id="gauge-energia" class="gauge-arc-canvas" width="90" height="60"></canvas>
-            <div class="gauge-val" id="g-energia">—</div>
-            <div class="gauge-sub" id="g-energia-sub">sin datos</div>
-          </div>
-          <div class="gauge-item">
-            <div class="gauge-header">👥 DENSIDAD</div>
-            <canvas id="gauge-densidad" class="gauge-arc-canvas" width="90" height="60"></canvas>
-            <div class="gauge-val" id="g-densidad">—</div>
-            <div class="gauge-sub" id="g-densidad-sub">sin datos</div>
-          </div>
-          <div class="gauge-item">
-            <div class="gauge-header">〰️ FATIGA</div>
-            <canvas id="gauge-fatiga" class="gauge-arc-canvas" width="90" height="60"></canvas>
-            <div class="gauge-val" id="g-fatiga">—</div>
-            <div class="gauge-sub" id="g-fatiga-sub">sin datos</div>
-          </div>
-          <div class="gauge-item">
-            <div class="gauge-header">❤️ CONEXIÓN</div>
-            <canvas id="gauge-conexion" class="gauge-arc-canvas" width="90" height="60"></canvas>
-            <div class="gauge-val" id="g-conexion">—</div>
-            <div class="gauge-sub" id="g-conexion-sub">sin datos</div>
-          </div>
-        </div>
-
-        <div class="pista-meta">
-          <div class="pm-item">
-            <span class="pm-label"><i class="ti ti-users"></i> Personas</span>
-            <span class="pm-val" id="m-personas">—</span>
-            <span class="pm-sub" id="m-personas-sub">SIN CÁMARA</span>
-          </div>
-          <div class="pm-item pm-gold">
-            <span class="pm-label"><i class="ti ti-user-check"></i> En pista</span>
-            <span class="pm-val" id="m-pista">—</span>
-            <span class="pm-sub" id="m-pista-sub">SIN CÁMARA</span>
-          </div>
-          <div class="pm-item">
-            <span class="pm-label"><i class="ti ti-clock"></i> Restante</span>
-            <span class="pm-val" id="m-tiempo">—</span>
-            <span class="pm-sub">tema actual</span>
-          </div>
-        </div>
-
-        <div class="evolucion-wrap">
-          <div class="evolucion-label">EVOLUCIÓN DE ENERGÍA</div>
-          <canvas id="evolucion-canvas" class="evolucion-canvas" height="48"></canvas>
-          <div class="evolucion-axis">
-            <span id="evo-t-start">—</span>
-            <span id="evo-t-end">—</span>
-          </div>
-        </div>
-
-        <div class="pista-rows">
-          <div class="p-row">
-            <span class="p-label">Aplausos</span>
-            <div class="p-bar"><div class="p-fill fill-a" style="width:0%" id="bar-aplausos"></div></div>
-            <span class="p-val" id="pv-aplausos">—</span>
-          </div>
-          <div class="p-row">
-            <span class="p-label">Abandono</span>
-            <div class="p-bar"><div class="p-fill fill-r" style="width:0%" id="bar-abandono"></div></div>
-            <span class="p-val" id="pv-abandono">—</span>
           </div>
         </div>
       </div>
