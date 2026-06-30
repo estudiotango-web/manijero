@@ -212,6 +212,7 @@ function stopMilonga() {
   actualizarBotones();
   actualizarLiveBadge();
   resetProgressUI();
+  setEl('time-total', '0:00');
   setEl('now-name', '—');
   setEl('now-orq',  '—');
   setEl('ia-texto', 'Radio detenida.');
@@ -507,6 +508,7 @@ function renderTemaActual(tema, index) {
   setEl('ia-footer-text', 'Tema ' + (index + 1) + ' de ' + biblioteca.length);
   setEl('badge-temas',    (index + 1) + ' / ' + biblioteca.length);
   setEl('badge-sub',      esCortina(tema) ? 'Cortina' : ('Tanda · ' + (tema.Genero || '')));
+  setEl('time-total', '—');
 
   setEl('meta-lufs', '—');
 
@@ -690,10 +692,13 @@ function setEl(id, val) { const el = document.getElementById(id); if (el) el.tex
 function activarRing(on) { const r = document.querySelector('.album-spinning-ring'); if (r) r.classList[on ? 'add' : 'remove']('active'); }
 
 function resetProgressUI() {
+  // Importante: NO tocar 'time-total' acá. Se setea desde actualizarDuracion()
+  // cuando el audio informa su duración real (loadedmetadata/durationchange),
+  // que dispara ANTES que canplaythrough. Si esta función lo resetea a '0:00'
+  // después, pisa el valor correcto y el contador total queda siempre en 0:00.
   const pf = document.getElementById('progress-fill');
   if (pf) pf.style.width = '0%';
   setEl('time-current', '0:00');
-  setEl('time-total',   '0:00');
 }
 
 function mostrarEstadoCarga(msg) {
