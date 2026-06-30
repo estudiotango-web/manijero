@@ -14,6 +14,8 @@
 const GAS_URL         = 'https://script.google.com/macros/s/AKfycbyRl3bE68wo-rRyJXCsdZ-DIG7JtDxGPMtz8Gz9fXzN4SEDpyFZHZl44kzSFa6eXo1j/exec';
 const POLLING_MS      = 30000;
 const CHAT_POLLING_MS = 8000;
+const CORTINA_DURACION_SEG = 45;
+const CORTINA_FADE_SEG     = 2.5;
 
 // ── Estado ─────────────────────────────────────────────────────────────────
 let biblioteca   = [];
@@ -324,6 +326,12 @@ function reproducirAudio(tema, offsetSeg) {
       el.currentTime = offsetSeg;
     }
 
+    // Reset del gain de cortina: por defecto en 1 (sin atenuar) para temas normales.
+    if (cortinaGainNode) {
+      cortinaGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+      cortinaGainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+    }
+
     el.play().catch(function (err) {
       if (audioGenId !== miGenId) return;
       console.warn('Error reproduciendo:', err);
@@ -333,6 +341,29 @@ function reproducirAudio(tema, offsetSeg) {
     resetProgressUI();
     activarRing(true);
     iniciarVU();
+
+    if (esCortina(tema) && cortinaGainNode && audioCtx) {
+      const now       = audioCtx.currentTime;
+      const restante  = Math.max(0, CORTINA_DURACION_SEG - offsetSeg);
+      const fadeIn    = Math.min(CORTINA_FADE_SEG, restante);
+      const fadeOutAt = Math.max(0, restante - CORTINA_FADE_SEG);
+
+      // Fade in: si entramos con offset > fade, arranca ya en volumen pleno.
+      if (offsetSeg < CORTINA_FADE_SEG) {
+        cortinaGainNode.gain.setValueAtTime(0.0001, now);
+        cortinaGainNode.gain.exponentialRampToValueAtTime(1, now + fadeIn);
+      }
+
+      // Fade out: arranca CORTINA_FADE_SEG antes del corte.
+      cortinaGainNode.gain.setValueAtTime(1, now + fadeOutAt);
+      cortinaGainNode.gain.exponentialRampToValueAtTime(0.0001, now + fadeOutAt + CORTINA_FADE_SEG);
+
+      setTimeout(function () {
+        if (audioGenId !== miGenId) return;
+        detenerVU();
+        solicitarAvance(tema.ID);
+      }, restante * 1000);
+    }
   }, { once: true });
 
   el.addEventListener('ended', function () {
@@ -356,7 +387,6 @@ function reproducirAudio(tema, offsetSeg) {
     setEl('time-current', fmt(el.currentTime));
   });
 }
-
 function detenerAudio() {
   if (audioEl) {
     audioEl.pause();
