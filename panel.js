@@ -25,13 +25,14 @@ let audioGenId   = 0;
 let pendingOffsetSeg = 0;
 
 // ── Web Audio API ──────────────────────────────────────────────────────────
-let audioCtx     = null;
-let sourceNode   = null;
-let bassFilter   = null;
-let trebleFilter = null;
-let gainNode     = null;
-let analyserNode = null;
-let audioEl      = null;
+let audioCtx        = null;
+let sourceNode      = null;
+let bassFilter      = null;
+let trebleFilter    = null;
+let gainNode        = null;
+let cortinaGainNode = null;
+let analyserNode    = null;
+let audioEl         = null;
 
 // ── Knob ───────────────────────────────────────────────────────────────────
 let knobValue    = 72;
@@ -104,7 +105,6 @@ async function sincronizarEntrada() {
 // ══════════════════════════════════════════════════════════════════════════
 // WEB AUDIO API
 // ══════════════════════════════════════════════════════════════════════════
-
 function initAudioContext() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -121,13 +121,17 @@ function initAudioContext() {
   trebleFilter.frequency.value = 4000;
   trebleFilter.gain.value = 0;
 
+  cortinaGainNode = audioCtx.createGain();
+  cortinaGainNode.gain.value = 1;
+
   analyserNode = audioCtx.createAnalyser();
   analyserNode.fftSize = 256;
   analyserNode.smoothingTimeConstant = 0.8;
 
   bassFilter.connect(trebleFilter);
   trebleFilter.connect(gainNode);
-  gainNode.connect(analyserNode);
+  gainNode.connect(cortinaGainNode);
+  cortinaGainNode.connect(analyserNode);
   analyserNode.connect(audioCtx.destination);
 }
 
