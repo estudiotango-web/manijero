@@ -682,7 +682,27 @@ let copilotoPool = COPILOTO_MENSAJES_GENERICOS;
 let copilotoIdx  = 0;
 
 function setCopiloto(texto) {
-  setEl('ia-texto', texto);
+  const textoEl   = document.getElementById('ia-texto');
+  const bubbleEl  = document.querySelector('.copiloto-bubble');
+  if (!textoEl) return;
+
+  // Quita animación previa para poder retriggerearla
+  textoEl.classList.remove('is-typing');
+  if (bubbleEl) bubbleEl.classList.remove('is-pulsing');
+
+  // Muestra los puntitos "escribiendo…" un instante
+  textoEl.innerHTML = '<span class="ia-typing-dots"><span></span><span></span><span></span></span>';
+
+  setTimeout(function () {
+    textoEl.textContent = texto;
+    // Forzar reflow para reiniciar la animación CSS
+    void textoEl.offsetWidth;
+    textoEl.classList.add('is-typing');
+    if (bubbleEl) {
+      void bubbleEl.offsetWidth;
+      bubbleEl.classList.add('is-pulsing');
+    }
+  }, 500);
 }
 
 function actualizarCopilotoParaTema(tema, index) {
