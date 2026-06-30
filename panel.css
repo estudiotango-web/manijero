@@ -124,7 +124,7 @@ html, body {
   border-radius: 20px; padding: 5px 12px; font-size: 11px; color: #E87070;
   font-weight: 500; white-space: nowrap; flex-shrink: 0;
 }
-.live-badge-inline { margin-left: 64px; }
+.live-badge-inline { margin-left: 50px; }
 .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rojo-claro); animation: pulse 2s infinite; flex-shrink: 0; }
 @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--rojo-claro); } 50% { opacity: 0.4; box-shadow: none; } }
 
