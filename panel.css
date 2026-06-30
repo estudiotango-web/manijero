@@ -253,10 +253,52 @@ html, body {
 .historial-orq { font-size: 10px; color: var(--crema3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ══════════════════════════════════════════════════════════ COPILOTO */
-.copiloto-inner { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
-.copiloto-avatar { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--oro-border); object-fit: cover; flex-shrink: 0; filter: sepia(20%) contrast(1.05); }
-.copiloto-bubble { flex: 1; min-width: 0; background: rgba(0,0,0,0.35); border: 0.5px solid var(--border); border-left: 2px solid var(--rojo); border-radius: 0 8px 8px 0; padding: 9px 11px; }
-.ia-text { font-size: 12px; color: var(--crema2); line-height: 1.55; font-style: italic; }
+.copiloto-inner {
+  display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px;
+  flex-direction: row-reverse; /* avatar a la derecha */
+}
+.copiloto-avatar {
+  width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid var(--oro-border);
+  object-fit: cover; flex-shrink: 0; filter: sepia(20%) contrast(1.05);
+  transform: scaleX(-1); /* espejo: ahora mira hacia la derecha */
+}
+.copiloto-bubble {
+  flex: 1; min-width: 0; background: rgba(0,0,0,0.35); border: 0.5px solid var(--border);
+  border-left: none; border-right: 2px solid var(--rojo); border-radius: 8px 0 0 8px;
+  padding: 9px 11px; position: relative; overflow: hidden;
+}
+.ia-text {
+  font-size: 12px; color: var(--crema2); line-height: 1.55; font-style: italic;
+  display: inline-block; opacity: 0;
+}
+.ia-text.is-typing { animation: ia-fade-in 0.45s ease forwards; }
+@keyframes ia-fade-in {
+  from { opacity: 0; transform: translateY(4px); filter: blur(1px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+
+/* Puntitos "escribiendo…" antes de mostrar el mensaje nuevo */
+.ia-typing-dots { display: inline-flex; gap: 3px; align-items: center; height: 14px; }
+.ia-typing-dots span {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--oro-claro);
+  opacity: 0.35; animation: ia-dot-bounce 1s infinite ease-in-out;
+}
+.ia-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.ia-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ia-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30%           { transform: translateY(-3px); opacity: 1; }
+}
+
+/* Brillo dorado en el borde al llegar mensaje nuevo */
+.copiloto-bubble.is-pulsing::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  animation: ia-bubble-pulse 0.7s ease-out;
+}
+@keyframes ia-bubble-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(201,146,74,0.35); }
+  100% { box-shadow: 0 0 0 8px rgba(201,146,74,0); }
+}
 
 .copiloto-rec { background: var(--rojo-dim); border: 0.5px solid var(--rojo-border); border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; }
 .rec-label { font-family: 'Oswald', sans-serif; font-size: 8px; letter-spacing: 2px; color: var(--crema3); text-transform: uppercase; margin-bottom: 2px; }
