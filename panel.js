@@ -1,12 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   El Manijero Radio · panel.js v3.0
+   El Manijero Radio · panel.js v3.1
    Radio global sincronizada.
    El frontend hace 5 cosas:
    1. Entrar sincronizado (offset = ahora - InicioTema)
-   2. Reproducir audio con Web Audio API (EQ real)
+   2. Reproducir audio con Web Audio API (EQ real, 3 knobs circulares)
    3. Avisar al backend "este tema terminó" (el backend decide qué sigue)
    4. Polling cada 30s para nuevos temas
-   5. Chat en tiempo real
+   5. Chat en tiempo real + Copiloto con mensajes contextuales rotativos
    IMPORTANTE: ningún cliente decide por sí mismo cuándo avanza la radio.
    Esa decisión es 100% del backend (avanzarTema en Radio.gs, con lock).
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -16,6 +16,7 @@ const POLLING_MS      = 30000;
 const CHAT_POLLING_MS = 8000;
 const CORTINA_DURACION_SEG = 45;
 const CORTINA_FADE_SEG     = 2.5;
+const COPILOTO_ROTACION_MS = 12000;
 
 // ── Estado ─────────────────────────────────────────────────────────────────
 let biblioteca   = [];
@@ -34,16 +35,19 @@ let cortinaGainNode = null;
 let analyserNode    = null;
 let audioEl         = null;
 
-// ── Knob ───────────────────────────────────────────────────────────────────
-let knobValue    = 72;
-let knobDragging = false;
+// ── Knobs (volumen / graves / agudos) ─────────────────────────────────────
+let knobValue    = 72;   // 0-100 -> gain 0-1
+let bassValue    = 50;   // 0-100 -> -15..+15 dB
+let trebleValue  = 50;   // 0-100 -> -15..+15 dB
+let knobDragging = null; // 'vol' | 'bass' | 'treble' | null
 let knobStartY   = 0;
-let knobStartVal = 72;
+let knobStartVal = 0;
 
 // ── Timers ─────────────────────────────────────────────────────────────────
-let pollingTimer = null;
-let chatTimer    = null;
-let vuTimer      = null;
+let pollingTimer  = null;
+let chatTimer     = null;
+let vuTimer       = null;
+let copilotoTimer = null;
 
 // ══════════════════════════════════════════════════════════════════════════
 // ARRANQUE
@@ -52,10 +56,10 @@ let vuTimer      = null;
 document.addEventListener('DOMContentLoaded', function () {
   updateClock();
   setInterval(updateClock, 30000);
-  initSliders();
-  initKnob();
+  initKnobs();
   actualizarBotones();
   sincronizarEntrada();
+  iniciarCopilotoRotativo();
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -102,9 +106,11 @@ async function sincronizarEntrada() {
     mostrarEstadoCarga('Error al conectar. Verificá la URL del GAS.');
   }
 }
+
 // ══════════════════════════════════════════════════════════════════════════
 // WEB AUDIO API
 // ══════════════════════════════════════════════════════════════════════════
+
 function initAudioContext() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -114,12 +120,12 @@ function initAudioContext() {
   bassFilter = audioCtx.createBiquadFilter();
   bassFilter.type = 'lowshelf';
   bassFilter.frequency.value = 200;
-  bassFilter.gain.value = 0;
+  bassFilter.gain.value = ((bassValue - 50) / 50) * 15;
 
   trebleFilter = audioCtx.createBiquadFilter();
   trebleFilter.type = 'highshelf';
   trebleFilter.frequency.value = 4000;
-  trebleFilter.gain.value = 0;
+  trebleFilter.gain.value = ((trebleValue - 50) / 50) * 15;
 
   cortinaGainNode = audioCtx.createGain();
   cortinaGainNode.gain.value = 1;
@@ -205,7 +211,7 @@ function pausarMilonga() {
   activarRing(false);
   actualizarBotones();
   actualizarLiveBadge();
-  setEl('ia-texto', 'Radio en pausa.');
+  setCopiloto('Radio en pausa. Tocá "Continuar" cuando quieras seguir.');
 }
 
 function reanudar() {
@@ -229,7 +235,7 @@ function stopMilonga() {
   setEl('time-total', '0:00');
   setEl('now-name', '—');
   setEl('now-orq',  '—');
-  setEl('ia-texto', 'Radio detenida.');
+  setCopiloto('Radio detenida. Cuando quieras volvés a entrar y seguimos.');
   renderCola([]);
 }
 
@@ -244,6 +250,7 @@ function reproducirTema(index) {
   renderTemaActual(tema, index);
   renderCola(biblioteca.slice(index + 1, index + 6));
   actualizarContadorTemas();
+  actualizarCopilotoParaTema(tema, index);
 
   if (tema.AudioURL) { reproducirAudio(tema, 0); return; }
 
@@ -255,6 +262,7 @@ function reproducirDesdeOffset(tema, offsetSeg) {
   detenerAudio();
   renderTemaActual(tema, indexActual);
   renderCola(biblioteca.slice(indexActual + 1, indexActual + 6));
+  actualizarCopilotoParaTema(tema, indexActual);
 
   if (tema.AudioURL) { reproducirAudio(tema, offsetSeg); return; }
   solicitarAvance(tema.ID);
@@ -293,7 +301,7 @@ function solicitarAvance(idFinalizado) {
 }
 
 function esperarNuevosTemas() {
-  setEl('ia-texto', 'Preparando próxima tanda…');
+  setCopiloto('Preparando la próxima tanda… un momento.');
   const espera = setInterval(function () {
     if (estadoPanel === 'stopped' || estadoPanel === 'idle') { clearInterval(espera); return; }
     if (indexActual < biblioteca.length) { clearInterval(espera); reproducirTema(indexActual); return; }
@@ -330,7 +338,6 @@ function reproducirAudio(tema, offsetSeg) {
       el.currentTime = offsetSeg;
     }
 
-    // Reset del gain de cortina: por defecto en 1 (sin atenuar) para temas normales.
     if (cortinaGainNode) {
       cortinaGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
       cortinaGainNode.gain.setValueAtTime(1, audioCtx.currentTime);
@@ -352,13 +359,11 @@ function reproducirAudio(tema, offsetSeg) {
       const fadeIn    = Math.min(CORTINA_FADE_SEG, restante);
       const fadeOutAt = Math.max(0, restante - CORTINA_FADE_SEG);
 
-      // Fade in: si entramos con offset > fade, arranca ya en volumen pleno.
       if (offsetSeg < CORTINA_FADE_SEG) {
         cortinaGainNode.gain.setValueAtTime(0.0001, now);
         cortinaGainNode.gain.exponentialRampToValueAtTime(1, now + fadeIn);
       }
 
-      // Fade out: arranca CORTINA_FADE_SEG antes del corte.
       cortinaGainNode.gain.setValueAtTime(1, now + fadeOutAt);
       cortinaGainNode.gain.exponentialRampToValueAtTime(0.0001, now + fadeOutAt + CORTINA_FADE_SEG);
 
@@ -391,6 +396,7 @@ function reproducirAudio(tema, offsetSeg) {
     setEl('time-current', fmt(el.currentTime));
   });
 }
+
 function detenerAudio() {
   if (audioEl) {
     audioEl.pause();
@@ -422,9 +428,6 @@ function enviarChat() {
 
   fetch(GAS_URL, {
     method:  'POST',
-    // text/plain evita el preflight CORS que Apps Script no responde:
-    // si se manda como application/json, el navegador hace OPTIONS antes
-    // y la petición se cae silenciosamente en varios navegadores.
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body:    JSON.stringify({ action: 'enviarChat', usuario: user, mensaje: msg }),
   })
@@ -523,17 +526,12 @@ function renderBibliotecaCargada() {
   setEl('now-name', 'El Manijero Radio');
   setEl('now-orq',  biblioteca.length + ' temas listos');
   setEl('now-year', '');
-  setEl('ia-texto', 'Radio lista. Presioná Play para entrar.');
+  setCopiloto('Radio lista. Tocá "Entrar a la radio" para sumarte a la transmisión global.');
   renderCola(biblioteca.slice(0, 5));
   actualizarContadorTemas();
 
   const conAudio = biblioteca.filter(t => !!t.AudioURL).length;
-  const badge    = document.getElementById('live-badge');
-  if (badge) {
-    badge.innerHTML =
-      '<div class="live-dot" style="background:#c9a84c;box-shadow:none"></div>' +
-      '<span> ' + biblioteca.length + ' temas · ' + conAudio + ' con audio</span>';
-  }
+  actualizarLiveBadge();
   setEl('badge-temas', biblioteca.length + ' temas');
   setEl('badge-sub',   conAudio + ' con audio');
 }
@@ -546,7 +544,7 @@ function renderTemaActual(tema, index) {
     (tema.Genero ? ' · ' + tema.Genero : '') +
     (tema.Estilo ? ' · ' + tema.Estilo : '')
   );
-  setEl('m-tanda-sub',    (tema.Genero || '') + ' · ' + (tema.Orquesta || ''));
+  setEl('m-tanda-sub',    (tema.Genero || '') + (tema.Orquesta ? ' · ' + tema.Orquesta : ''));
   setEl('ia-footer-text', 'Tema ' + (index + 1) + ' de ' + biblioteca.length);
   setEl('badge-temas',    (index + 1) + ' / ' + biblioteca.length);
   setEl('badge-sub',      esCortina(tema) ? 'Cortina' : ('Tanda · ' + (tema.Genero || '')));
@@ -561,10 +559,6 @@ function renderTemaActual(tema, index) {
 
   const chips = document.getElementById('now-chips');
   if (chips) chips.innerHTML = html;
-
-  setEl('ia-texto', esCortina(tema)
-    ? 'Cortina · próxima tanda en camino.'
-    : 'Reproduciendo en la radio global.');
 }
 
 function actualizarContadorTemas() {
@@ -636,24 +630,107 @@ function actualizarBotones() {
   }
 }
 
+/* Actualiza tanto el badge inline (junto al logo, mobile y desktop) */
 function actualizarLiveBadge() {
-  const b = document.getElementById('live-badge');
+  const b = document.getElementById('live-badge-inline');
   if (!b) return;
   if (estadoPanel === 'playing') {
-    b.innerHTML = '<div class="live-dot"></div><span> EN VIVO · Radio global</span>';
+    b.innerHTML = '<div class="live-dot"></div><span>EN VIVO</span>';
   } else if (estadoPanel === 'paused') {
-    b.innerHTML = '<div class="live-dot" style="background:#c9a84c;animation:none"></div><span> En pausa</span>';
+    b.innerHTML = '<div class="live-dot" style="background:#c9a84c;animation:none"></div><span>En pausa</span>';
+  } else if (biblioteca.length) {
+    b.innerHTML = '<div class="live-dot" style="background:#c9a84c;animation:none;box-shadow:none"></div><span>Listo</span>';
   } else {
-    b.innerHTML = '<div class="live-dot" style="background:#555;animation:none"></div><span> Detenido</span>';
+    b.innerHTML = '<div class="live-dot" style="background:#555;animation:none"></div><span>Conectando…</span>';
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// KNOB
+// COPILOTO — más vivo: explica qué pasa y por qué, invita al chat
 // ══════════════════════════════════════════════════════════════════════════
 
-function drawKnob(value) {
-  const canvas = document.getElementById('knob-canvas');
+const COPILOTO_MENSAJES_TANGO = [
+  'Tanda en curso. Si querés pedir un tango o mandar un saludo, escribilo en el chat — lo leo en cuanto entra.',
+  'Cuatro tangos seguidos de la misma orquesta, como manda la tradición milonguera, para que la pista no pierda el compás.',
+  'Esta selección prioriza la Época de Oro (1935-1955) — ahí está el grueso del repertorio que mejor se baila.',
+  '¿Sabías que las tandas se arman por orquesta para que las parejas reconozcan el estilo y no corten el baile? Así lo hacemos acá.',
+];
+
+const COPILOTO_MENSAJES_VALS = [
+  'Cambiamos a vals. Un respiro romántico entre tandas de tango — así se ventila la pista.',
+  'Vals en el aire. Tres temas, ritmo de 3/4, ideal para los giros.',
+];
+
+const COPILOTO_MENSAJES_MILONGA = [
+  'Milonga arriba. Acá se acelera todo — la pista se llena.',
+  'Tanda de milonga: el contrapunto más movido de la noche.',
+];
+
+const COPILOTO_MENSAJES_CORTINA = [
+  'Cortina. Cortamos la pista 45 segundos para que las parejas se separen y armen las próximas — así se respeta el código milonguero.',
+  'Pausa corta entre tandas. Aprovechá para pedir tu próximo tango en el chat.',
+  'La cortina existe para evitar que una tanda se mezcle con la siguiente. En 45 segundos volvemos con más tango.',
+];
+
+const COPILOTO_MENSAJES_GENERICOS = [
+  '¿Querés escuchar algo en especial? Pedilo en el chat de la radio — leo los mensajes en vivo.',
+  'El Manijero arma las tandas automáticamente, alternando tango, vals y milonga como en una milonga real.',
+  'Esto es radio sincronizada: todos los que están conectados ahora escuchan exactamente el mismo tema, al mismo tiempo.',
+];
+
+let copilotoPool = COPILOTO_MENSAJES_GENERICOS;
+let copilotoIdx  = 0;
+
+function setCopiloto(texto) {
+  setEl('ia-texto', texto);
+}
+
+function actualizarCopilotoParaTema(tema, index) {
+  if (esCortina(tema)) {
+    copilotoPool = COPILOTO_MENSAJES_CORTINA;
+  } else {
+    const g = String(tema.Genero || '').trim().toLowerCase();
+    if (g === 'vals')    copilotoPool = COPILOTO_MENSAJES_VALS;
+    else if (g === 'milonga') copilotoPool = COPILOTO_MENSAJES_MILONGA;
+    else copilotoPool = COPILOTO_MENSAJES_TANGO;
+  }
+  copilotoIdx = 0;
+  setCopiloto(copilotoPool[0]);
+
+  // Próxima tanda / recomendación visible
+  const sig = biblioteca[index + 1];
+  if (sig) {
+    const genSig = esCortina(sig) ? 'Cortina' : (sig.Genero || 'Tango');
+    setEl('rec-proxima', genSig + (sig.Orquesta ? ' · ' + sig.Orquesta : ''));
+  }
+}
+
+/* Rota el mensaje del copiloto cada COPILOTO_ROTACION_MS mientras hay un
+   pool activo, alternando entre los mensajes contextuales del género actual
+   y, de vez en cuando, una invitación genérica al chat — así no queda mudo
+   entre que arranca el tema y que termina la cortina. */
+function iniciarCopilotoRotativo() {
+  if (copilotoTimer) return;
+  copilotoTimer = setInterval(function () {
+    if (estadoPanel !== 'playing') return;
+    copilotoIdx++;
+    // Cada 3ra rotación, intercalamos un mensaje genérico que invita al chat.
+    if (copilotoIdx % 3 === 0) {
+      const g = COPILOTO_MENSAJES_GENERICOS[Math.floor(Math.random() * COPILOTO_MENSAJES_GENERICOS.length)];
+      setCopiloto(g);
+      return;
+    }
+    const msg = copilotoPool[copilotoIdx % copilotoPool.length];
+    setCopiloto(msg);
+  }, COPILOTO_ROTACION_MS);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// KNOBS CIRCULARES (volumen / graves / agudos)
+// ══════════════════════════════════════════════════════════════════════════
+
+function drawKnobGeneric(canvasId, value, dbMin, dbMax, dbOutId, fmtDb) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const W = canvas.width, H = canvas.height;
   const ctx = canvas.getContext('2d');
@@ -682,9 +759,13 @@ function drawKnob(value) {
   ctx.fillStyle = '#1A1008'; ctx.fill();
   ctx.strokeStyle = 'rgba(201,146,74,0.2)'; ctx.lineWidth = 1; ctx.stroke();
 
-  const db = -40 + (value / 100) * 52;
-  setEl('knob-db', (db > 0 ? '+' : '') + db.toFixed(1) + ' dB');
+  const db = dbMin + (value / 100) * (dbMax - dbMin);
+  if (dbOutId) setEl(dbOutId, fmtDb(db));
 }
+
+function drawKnobVol(value)    { drawKnobGeneric('knob-canvas',        value, -40, 12, 'knob-db',   v => (v > 0 ? '+' : '') + v.toFixed(1) + ' dB'); }
+function drawKnobBass(value)   { drawKnobGeneric('knob-bass-canvas',   value, -15, 15, 'bass-db',   v => (v > 0 ? '+' : '') + v.toFixed(1) + ' dB'); }
+function drawKnobTreble(value) { drawKnobGeneric('knob-treble-canvas', value, -15, 15, 'treble-db', v => (v > 0 ? '+' : '') + v.toFixed(1) + ' dB'); }
 
 function getEventY(e) {
   if (e.touches && e.touches.length > 0)               return e.touches[0].clientY;
@@ -692,36 +773,55 @@ function getEventY(e) {
   return e.clientY;
 }
 
-function initKnob() {
-  const canvas = document.getElementById('knob-canvas');
+function aplicarKnob(tipo, value) {
+  if (tipo === 'vol') {
+    knobValue = value;
+    drawKnobVol(value);
+    if (gainNode) gainNode.gain.value = value / 100;
+  } else if (tipo === 'bass') {
+    bassValue = value;
+    drawKnobBass(value);
+    if (bassFilter) bassFilter.gain.value = ((value - 50) / 50) * 15;
+  } else if (tipo === 'treble') {
+    trebleValue = value;
+    drawKnobTreble(value);
+    if (trebleFilter) trebleFilter.gain.value = ((value - 50) / 50) * 15;
+  }
+}
+
+function bindKnob(canvasId, tipo, getValue) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  drawKnob(knobValue);
-  canvas.addEventListener('mousedown', function (e) {
-    knobDragging = true; knobStartY = getEventY(e); knobStartVal = knobValue; e.preventDefault();
-  });
-  window.addEventListener('mousemove', function (e) {
-    if (!knobDragging) return;
-    knobValue = Math.max(0, Math.min(100, knobStartVal + (knobStartY - getEventY(e)) * 0.6));
-    drawKnob(knobValue);
-    const s = document.getElementById('vol');
-    const o = document.getElementById('vol-out');
-    if (s) s.value = Math.round(knobValue);
-    if (o) o.textContent = Math.round(knobValue);
-    if (gainNode) gainNode.gain.value = knobValue / 100;
+
+  function onStart(e) {
+    knobDragging = tipo;
+    knobStartY   = getEventY(e);
+    knobStartVal = getValue();
     e.preventDefault();
-  });
-  window.addEventListener('mouseup', function () { knobDragging = false; });
-  canvas.addEventListener('touchstart', function (e) {
-    knobDragging = true; knobStartY = getEventY(e); knobStartVal = knobValue; e.preventDefault();
-  }, { passive: false });
-  canvas.addEventListener('touchmove', function (e) {
-    if (!knobDragging) return;
-    knobValue = Math.max(0, Math.min(100, knobStartVal + (knobStartY - getEventY(e)) * 0.6));
-    drawKnob(knobValue);
-    if (gainNode) gainNode.gain.value = knobValue / 100;
+  }
+  function onMove(e) {
+    if (knobDragging !== tipo) return;
+    const v = Math.max(0, Math.min(100, knobStartVal + (knobStartY - getEventY(e)) * 0.6));
+    aplicarKnob(tipo, v);
     e.preventDefault();
-  }, { passive: false });
-  canvas.addEventListener('touchend', function () { knobDragging = false; });
+  }
+  function onEnd() { if (knobDragging === tipo) knobDragging = null; }
+
+  canvas.addEventListener('mousedown', onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onEnd);
+  canvas.addEventListener('touchstart', onStart, { passive: false });
+  canvas.addEventListener('touchmove', onMove, { passive: false });
+  canvas.addEventListener('touchend', onEnd);
+}
+
+function initKnobs() {
+  drawKnobVol(knobValue);
+  drawKnobBass(bassValue);
+  drawKnobTreble(trebleValue);
+  bindKnob('knob-canvas',        'vol',    () => knobValue);
+  bindKnob('knob-bass-canvas',   'bass',   () => bassValue);
+  bindKnob('knob-treble-canvas', 'treble', () => trebleValue);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -734,10 +834,6 @@ function setEl(id, val) { const el = document.getElementById(id); if (el) el.tex
 function activarRing(on) { const r = document.querySelector('.album-spinning-ring'); if (r) r.classList[on ? 'add' : 'remove']('active'); }
 
 function resetProgressUI() {
-  // Importante: NO tocar 'time-total' acá. Se setea desde actualizarDuracion()
-  // cuando el audio informa su duración real (loadedmetadata/durationchange),
-  // que dispara ANTES que canplaythrough. Si esta función lo resetea a '0:00'
-  // después, pisa el valor correcto y el contador total queda siempre en 0:00.
   const pf = document.getElementById('progress-fill');
   if (pf) pf.style.width = '0%';
   setEl('time-current', '0:00');
@@ -775,37 +871,4 @@ function updateClock() {
   setEl('evento-fecha', dias[now.getDay()] + ' ' + now.getDate() + ' ' + meses[now.getMonth()]);
 }
 
-function initSliders() {
-  const vol = document.getElementById('vol');
-  const volOut = document.getElementById('vol-out');
-  if (vol) {
-    vol.addEventListener('input', function () {
-      knobValue = parseInt(vol.value);
-      drawKnob(knobValue);
-      if (volOut) volOut.textContent = Math.round(knobValue);
-      if (gainNode) gainNode.gain.value = knobValue / 100;
-    });
-  }
-
-  const bass = document.getElementById('bass');
-  if (bass) {
-    bass.addEventListener('input', function () {
-      const v = ((parseInt(bass.value) - 50) / 50) * 15;
-      if (bassFilter) bassFilter.gain.value = v;
-      const o = document.getElementById('bass-out');
-      if (o) o.textContent = Math.round(bass.value);
-    });
-  }
-
-  const treble = document.getElementById('treble');
-  if (treble) {
-    treble.addEventListener('input', function () {
-      const v = ((parseInt(treble.value) - 50) / 50) * 15;
-      if (trebleFilter) trebleFilter.gain.value = v;
-      const o = document.getElementById('treble-out');
-      if (o) o.textContent = Math.round(treble.value);
-    });
-  }
-}
-
-console.log('El Manijero Radio v3.0 · listo');
+console.log('El Manijero Radio v3.1 · listo');
