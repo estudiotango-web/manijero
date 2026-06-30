@@ -269,7 +269,7 @@ html, body {
 }
 .ia-text {
   font-size: 12px; color: var(--crema2); line-height: 1.55; font-style: italic;
-  display: inline-block; opacity: 0;
+  display: inline-block;
 }
 .ia-text.is-typing { animation: ia-fade-in 0.45s ease forwards; }
 @keyframes ia-fade-in {
