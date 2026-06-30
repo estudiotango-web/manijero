@@ -395,7 +395,7 @@ html, body {
   .topbar-center { grid-column: 1; grid-row: 2; }
   .topbar-right  { display: none; }
 
-  .live-badge-inline span { display: none; }
+  .live-badge-inline span { font-size: 9px; }
   .live-badge-inline { padding: 5px 8px; }
 
   .eyebrow-left { flex-wrap: wrap; }
