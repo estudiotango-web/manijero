@@ -10,7 +10,7 @@
    6. Chat en tiempo real
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const GAS_URL              = 'https://script.google.com/macros/s/AKfycbyqQ_W559BjKp3_q3oSy_numyR2pL_yBf2CX0NuvahNqQm0iA9vZ_ePX9OWabUw_zJGxw/exec';
+const GAS_URL              = 'https://script.google.com/macros/s/AKfycbyRl3bE68wo-rRyJXCsdZ-DIG7JtDxGPMtz8Gz9fXzN4SEDpyFZHZl44kzSFa6eXo1j/exec';
 const CORTINA_DURACION_SEG = 45;
 const POLLING_MS           = 30000;
 const CHAT_POLLING_MS      = 8000;
